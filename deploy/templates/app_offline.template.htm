@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>API — กำลังอัปเดต</title>
+<style>
+  :root { --bg:#fff8ec; --card:#ffffff; --text:#3b1f0a; --muted:#7a5a3f; --line:#f1dcc0; --brand:#ff8a00; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#1d1308; --card:#2a1c0e; --text:#fbefdc; --muted:#c9ab88; --line:#4a3319; --brand:#ffa31f; } }
+  * { box-sizing:border-box; }
+  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center; padding:16px;
+         background:var(--bg); color:var(--text); text-align:center;
+         font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans Thai","Sarabun",sans-serif; }
+  .card { max-width:420px; width:100%; background:var(--card); border:1px solid var(--line); border-radius:22px; padding:28px 22px; }
+  h1 { font-size:22px; margin:6px 0 8px; }
+  p { margin:0; color:var(--muted); }
+  .bar { height:6px; border-radius:99px; background:var(--line); margin:18px auto 0; max-width:220px; overflow:hidden; }
+  .bar i { display:block; height:100%; width:40%; background:var(--brand); border-radius:99px; animation:slide 1.4s ease-in-out infinite; }
+  @keyframes slide { 0%{margin-left:-40%} 100%{margin-left:100%} }
+  @media (prefers-reduced-motion: reduce) { .bar i { animation:none; margin-left:30%; } }
+</style>
+</head>
+<body>
+<main class="card">
+  <h1>API กำลังอัปเดต</h1>
+  <p>API จะกลับมาออนไลน์ในอีกสักครู่<br>กรุณาลองใหม่อีกครั้งใน 1–2 นาที</p>
+  <div class="bar" aria-hidden="true"><i></i></div>
+</main>
+</body>
+</html>

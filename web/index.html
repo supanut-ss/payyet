@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#fff8ec" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1d1308" media="(prefers-color-scheme: dark)">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="PayYet">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.webmanifest">
+<title>PayYet — เก็บเงินในกลุ่ม LINE ง่ายๆ</title>
+<meta name="description" content="PayYet บอท LINE ช่วยเก็บเงินในกลุ่มหรือรายคน มี QR พร้อมเพย์ แนบสลิป และเตือนอัตโนมัติ">
+<meta property="og:title" content="PayYet — เก็บเงินในกลุ่ม LINE ง่ายๆ">
+<meta property="og:description" content="สั่งเก็บเงินด้วยบรรทัดเดียว จ่ายด้วย QR พร้อมเพย์ เตือนอัตโนมัติ">
+<meta property="og:image" content="img/logo-512.webp">
+<link rel="icon" type="image/png" href="img/favicon-48.png">
+<link rel="apple-touch-icon" href="img/apple-touch-icon.png">
+<style>
+  :root {
+    --bg:#fff8ec; --card:#ffffff; --text:#3b1f0a; --muted:#7a5a3f; --line:#f1dcc0;
+    --brand:#ff8a00; --brand-dark:#c25e00; --brand-soft:#ffe9c7; --accent:#ffc400; --onbrand:#2b1400;
+    --code-bg:#fff1d6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg:#1d1308; --card:#2a1c0e; --text:#fbefdc; --muted:#c9ab88; --line:#4a3319;
+      --brand:#ffa31f; --brand-dark:#ffbf5e; --brand-soft:#3b2810; --accent:#ffc400; --onbrand:#2b1400;
+      --code-bg:#3b2810;
+    }
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin:0; background:var(--bg); color:var(--text);
+    font:16px/1.65 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans Thai","Sarabun",sans-serif;
+  }
+  .wrap { max-width:960px; margin:0 auto; padding:0 16px; }
+  header.hero { text-align:center; padding:40px 0 28px; }
+  .logo { width:min(300px,70vw); height:auto; display:block; margin:0 auto 8px; }
+  h1 { font-size:clamp(26px,5vw,38px); line-height:1.25; margin:8px 0 10px; letter-spacing:-.01em; }
+  .lead { font-size:clamp(16px,2.5vw,19px); color:var(--muted); max-width:34em; margin:0 auto 22px; }
+  .cta { display:flex; flex-wrap:wrap; gap:10px; justify-content:center; }
+  .btn {
+    display:inline-flex; align-items:center; justify-content:center; min-height:46px; padding:10px 22px;
+    border-radius:999px; font-weight:700; text-decoration:none; font-size:16px;
+    background:var(--brand); color:var(--onbrand); border:2px solid var(--brand);
+  }
+  .btn.secondary { background:transparent; color:var(--text); border-color:var(--line); }
+  .btn:focus-visible, a:focus-visible { outline:3px solid var(--accent); outline-offset:2px; }
+  section { padding:26px 0; }
+  h2 { font-size:clamp(21px,3.4vw,27px); margin:0 0 16px; }
+  .grid { display:grid; gap:14px; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:18px; padding:18px; }
+  .card h3 { margin:0 0 6px; font-size:18px; }
+  .card p { margin:0; color:var(--muted); font-size:15px; }
+  .step-no {
+    width:36px; height:36px; border-radius:50%; background:var(--brand); color:var(--onbrand);
+    display:inline-flex; align-items:center; justify-content:center; font-weight:800; margin-bottom:10px;
+  }
+  code {
+    background:var(--code-bg); border-radius:8px; padding:2px 8px; font:600 15px/1.5 ui-monospace,Consolas,"Noto Sans Thai",monospace;
+    word-break:break-word;
+  }
+  table { width:100%; border-collapse:collapse; background:var(--card); border:1px solid var(--line); border-radius:18px; overflow:hidden; }
+  th, td { text-align:left; padding:12px 14px; vertical-align:top; border-bottom:1px solid var(--line); font-size:15px; }
+  tr:last-child td { border-bottom:0; }
+  th { background:var(--brand-soft); font-size:14px; }
+  td:first-child { white-space:nowrap; }
+  @media (max-width:560px) { td:first-child { white-space:normal; } }
+  .note { color:var(--muted); font-size:14px; margin-top:12px; }
+  footer { border-top:1px solid var(--line); margin-top:20px; padding:22px 0 40px; color:var(--muted); font-size:14px; text-align:center; }
+  footer p { margin:4px 0; }
+  .hidden { display:none !important; }
+
+  /* ---------- all screens: safe areas, touch, no tap flash ---------- */
+  html { -webkit-text-size-adjust:100%; }
+  body { -webkit-tap-highlight-color:transparent; padding-left:env(safe-area-inset-left); padding-right:env(safe-area-inset-right); }
+  .btn { min-height:48px; touch-action:manipulation; }
+  section { scroll-margin-top:72px; }
+  .tabbar, .appbar { display:none; }
+
+  /* ---------- desktop: roomier ---------- */
+  @media (min-width:1024px) {
+    .wrap { max-width:1080px; padding:0 24px; }
+    header.hero { padding:56px 0 40px; }
+    .grid { grid-template-columns:repeat(3,1fr); }
+    .card { padding:22px; transition:transform .15s, box-shadow .15s; }
+    .card:hover { transform:translateY(-2px); box-shadow:0 8px 24px rgba(194,94,0,.12); }
+  }
+
+  /* ---------- tablet: two columns, app chrome ---------- */
+  @media (min-width:600px) and (max-width:1023px) {
+    .grid { grid-template-columns:repeat(2,1fr); }
+  }
+
+  /* ---------- mobile + tablet: behave like an app ---------- */
+  @media (max-width:1023px), (display-mode:standalone) {
+    body { padding-bottom:calc(64px + env(safe-area-inset-bottom)); overscroll-behavior-y:none; }
+    .appbar {
+      display:flex; align-items:center; gap:10px; position:sticky; top:0; z-index:20;
+      padding:calc(8px + env(safe-area-inset-top)) 16px 8px; background:var(--bg);
+      border-bottom:1px solid var(--line); font-weight:800; font-size:18px;
+    }
+    .appbar img { width:32px; height:32px; border-radius:9px; }
+    header.hero { padding:20px 0 14px; }
+    .logo { width:min(180px,45vw); }
+    .tabbar {
+      display:grid; grid-template-columns:repeat(3,1fr); position:fixed; left:0; right:0; bottom:0; z-index:30;
+      padding-bottom:env(safe-area-inset-bottom); background:var(--card); border-top:1px solid var(--line);
+    }
+    .tabbar a {
+      display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; min-height:56px;
+      color:var(--muted); text-decoration:none; font-size:12px; font-weight:600; touch-action:manipulation;
+    }
+    .tabbar a svg { width:24px; height:24px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+    .tabbar a.active { color:var(--brand-dark); }
+    .card { border-radius:20px; }
+    footer { padding-bottom:24px; }
+  }
+
+  /* ---------- phone: command table becomes stacked cards ---------- */
+  @media (max-width:640px) {
+    table, tbody, tr, td { display:block; width:100%; }
+    table { background:transparent; border:0; }
+    thead { display:none; }
+    tr { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:12px 14px; margin-bottom:10px; }
+    td { border:0; padding:2px 0; }
+    td:first-child { font-weight:700; }
+    td:last-child { color:var(--muted); }
+    .cta .btn { flex:1 1 100%; }
+  }
+  @media (prefers-reduced-motion:reduce) { html { scroll-behavior:auto; } .card { transition:none; } }
+</style>
+</head>
+<body>
+<div class="appbar"><img src="img/logo-256.webp" width="32" height="32" alt=""><span>PayYet</span></div>
+<div class="wrap">
+  <header class="hero">
+    <img class="logo" src="img/logo-512.webp" width="512" height="512" alt="PayYet — ใบเสร็จยิ้มถือเหรียญและโทรศัพท์สแกน QR">
+    <h1>เก็บเงินในกลุ่ม LINE<br>ไม่ต้องตามทวงทีละคน</h1>
+    <p class="lead">สั่งเก็บเงินด้วยข้อความบรรทัดเดียว เพื่อนจ่ายด้วย QR พร้อมเพย์ แนบสลิปในหน้าเดียว และบอทเตือนให้ทุกวัน</p>
+    <div class="cta">
+      <a id="add-friend" class="btn hidden" href="#">เพิ่มเพื่อน LINE</a>
+      <a class="btn secondary" href="#how">ใช้งานอย่างไร</a>
+    </div>
+  </header>
+
+  <section id="how" aria-labelledby="how-h">
+    <h2 id="how-h">เริ่มใช้งานใน 3 ขั้นตอน</h2>
+    <div class="grid">
+      <div class="card">
+        <div class="step-no" aria-hidden="true">1</div>
+        <h3>เพิ่มบอทเป็นเพื่อน</h3>
+        <p>ในแชทส่วนตัวพิมพ์ <code>พร้อมเพย์ 0812345678</code> เพื่อบอกว่าจะรับเงินที่เบอร์หรือเลขบัตรไหน</p>
+      </div>
+      <div class="card">
+        <div class="step-no" aria-hidden="true">2</div>
+        <h3>ชวนบอทเข้ากลุ่ม</h3>
+        <p>ให้ทุกคนในกลุ่มพิมพ์ข้อความอะไรก็ได้หนึ่งครั้ง บอทจะได้รู้จักสมาชิก (ไม่ต้องเพิ่มเพื่อนบอท)</p>
+      </div>
+      <div class="card">
+        <div class="step-no" aria-hidden="true">3</div>
+        <h3>สั่งเก็บเงินในแชทส่วนตัว</h3>
+        <p>พิมพ์ <code>หาร ค่าข้าว 500</code> หรือ <code>เก็บ ค่าอาหาร 200</code> แล้วเลือกคนในหน้าที่เปิดขึ้น กดยืนยัน บอทจะโพสต์การ์ดบิลลงกลุ่มให้ทันที</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="features" aria-labelledby="feat-h">
+    <h2 id="feat-h">ทำอะไรได้บ้าง</h2>
+    <div class="grid">
+      <div class="card"><h3>สั่งเก็บเงินบรรทัดเดียว</h3><p><code>เก็บ</code> = คิดต่อคน, <code>หาร</code> = หารยอดรวมตามจำนวนคนที่เลือก ติ๊กเลือกคนจากรายชื่อสมาชิกในกลุ่ม ผลที่คำนวณแล้วแสดงให้ตรวจก่อนยืนยัน และยกเลิกได้ภายใน 10 นาที</p></div>
+      <div class="card"><h3>QR พร้อมเพย์ + แนบสลิป</h3><p>กดปุ่ม "จ่ายเงิน" บนการ์ด เห็นยอดคงเหลือ สแกนจ่าย แล้วแนบสลิปในหน้าเดียว กลุ่มไม่รกด้วยรูปสลิป</p></div>
+      <div class="card"><h3>เตือนอัตโนมัติ</h3><p>สรุปรายชื่อคนที่ยังไม่จ่ายลงกลุ่มวันละครั้งเวลา 10:00 ส่วนบิลรายคนเตือนแบบส่วนตัว</p></div>
+      <div class="card"><h3>รวมยอดเป็นบิลเดียว</h3><p>เพิ่มยอดใหม่ระหว่างที่บิลยังไม่ปิด ระบบรวมให้เป็นบิลเดิม คนที่จ่ายแล้วค้างเฉพาะส่วนที่เพิ่ม</p></div>
+      <div class="card"><h3>เช็คยอดได้ทุกเมื่อ</h3><p>พิมพ์ <code>ยอด</code> ในแชทส่วนตัวเพื่อดูว่าค้างใครและใครค้างคุณ หรือพิมพ์ในกลุ่มเพื่อดูสถานะบิลของกลุ่ม</p></div>
+      <div class="card"><h3>ผู้เก็บยืนยันสลิป</h3><p>สลิปถูกส่งให้ผู้เก็บเงินในแชทส่วนตัวพร้อมปุ่มยืนยัน/ปฏิเสธ เงินโอนตรงเข้าบัญชีของผู้เก็บ</p></div>
+    </div>
+  </section>
+
+  <section id="cmds" aria-labelledby="cmd-h">
+    <h2 id="cmd-h">ตัวอย่างคำสั่ง</h2>
+    <table>
+      <thead><tr><th scope="col">พิมพ์ว่า</th><th scope="col">ความหมาย</th></tr></thead>
+      <tbody>
+        <tr><td><code>เก็บ ค่าอาหาร 200</code></td><td>เก็บคนละ 200 แล้วเลือกคนจากรายชื่อ (เลือกได้หลายคน คนละ 200)</td></tr>
+        <tr><td><code>หาร ค่าเครื่องดื่ม 300</code></td><td>หาร 300 ตามจำนวนคนที่เลือก</td></tr>
+        <tr><td><code>หาร 600 ค่าข้าว ทุกคน</code></td><td>หารทุกคนในกลุ่ม ไม่ต้องเลือก</td></tr>
+        <tr><td><code>หาร 600 ยกเว้น สมชาย</code></td><td>หารทุกคนยกเว้นสมชาย</td></tr>
+        <tr><td><code>เก็บ 200 สมชาย</code></td><td>ระบุชื่อเลย ไม่ต้องเลือก (เก็บส่วนตัวจากคนเดียว)</td></tr>
+        <tr><td><code>เก็บ สมชาย 200 มาลี 300</code></td><td>กำหนดยอดรายคน</td></tr>
+        <tr><td><code>ยอด</code></td><td>ดูยอดค้างจ่ายและยอดที่คนอื่นค้างคุณ</td></tr>
+      </tbody>
+    </table>
+    <p class="note">สั่งเก็บเงินได้เฉพาะในแชทส่วนตัวกับบอทเท่านั้น เพื่อไม่ให้กลุ่มรก</p>
+  </section>
+
+  <footer>
+    <p><strong>PayYet</strong> — ระบบไม่ได้รับหรือโอนเงินแทนใคร เงินโอนตรงเข้าพร้อมเพย์ของผู้เก็บ</p>
+    <p>เก็บข้อมูลเท่าที่จำเป็นต่อการทำงาน: ชื่อโปรไฟล์ LINE ยอดบิล และรูปสลิปที่แนบ</p>
+  </footer>
+</div>
+
+<nav class="tabbar" aria-label="เมนูหลัก">
+  <a href="#how" class="active"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l3 3 5-6"/></svg>เริ่มใช้งาน</a>
+  <a href="#features"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/></svg>ฟีเจอร์</a>
+  <a href="#cmds"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8l4 4-4 4M12 17h7"/></svg>คำสั่ง</a>
+</nav>
+
+<script>
+  // Highlight the tab of the section currently on screen.
+  (function () {
+    var links = {}; document.querySelectorAll('.tabbar a').forEach(function (a) { links[a.getAttribute('href').slice(1)] = a; });
+    if (!('IntersectionObserver' in window)) return;
+    var io = new IntersectionObserver(function (es) {
+      es.forEach(function (e) {
+        if (!e.isIntersecting) return;
+        Object.keys(links).forEach(function (k) { links[k].classList.toggle('active', k === e.target.id); });
+      });
+    }, { rootMargin: '-35% 0px -55% 0px' });
+    Object.keys(links).forEach(function (k) { var t = document.getElementById(k); if (t) io.observe(t); });
+  })();
+</script>
+<script>
+  // Show the "add friend" button only when the server knows the official account URL (App:LineOaUrl).
+  fetch('https://api.drivetodev.online/api/pay/config').then(function (r) { return r.json(); }).then(function (c) {
+    if (c && /^https:\/\/(line\.me|lin\.ee)\//.test(c.oaUrl || '')) {
+      var a = document.getElementById('add-friend');
+      a.href = c.oaUrl;
+      a.classList.remove('hidden');
+    }
+  }).catch(function () {});
+</script>
+</body>
+</html>

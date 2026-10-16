@@ -1,0 +1,25 @@
+{
+  "name": "PayYet",
+  "short_name": "PayYet",
+  "description": "เก็บเงินในกลุ่ม LINE ง่ายๆ",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#fff8ec",
+  "theme_color": "#ff8a00",
+  "lang": "th",
+  "icons": [
+    {
+      "src": "img/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    },
+    {
+      "src": "img/logo-512.webp",
+      "sizes": "512x512",
+      "type": "image/webp",
+      "purpose": "any"
+    }
+  ]
+}

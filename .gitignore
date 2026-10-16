@@ -1,0 +1,38 @@
+# Build output
+bin/
+obj/
+publish/
+deploy/app/
+deploy/app_offline.htm
+PayYet-app.zip
+TestResults/
+
+# Secrets and machine-local config (never commit)
+appsettings.Production.json
+appsettings.*.local.json
+.env
+.env.*
+# FTP credentials (deploy-*.ps1 wrappers and the core script are tracked)
+deploy.credentials.ps1
+App_Data/
+
+# Deploy caches / scratch
+.deploy-cache/
+deploy-check/
+
+# Generated rich menu files (rebuild: python tools/richmenu/richmenu.py build)
+tools/richmenu/richmenu.png
+tools/richmenu/richmenu.jpg
+__pycache__/
+*.pyc
+
+# IDE / OS / tooling
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+.claude/
+Thumbs.db
+.DS_Store
+*.log

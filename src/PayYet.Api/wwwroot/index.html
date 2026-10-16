@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#fff8ec" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1d1308" media="(prefers-color-scheme: dark)">
+<title>API Status</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%27http://www.w3.org/2000/svg%27 viewBox=%270 0 32 32%27%3E%3Ccircle cx=%2716%27 cy=%2716%27 r=%2712%27 fill=%27%2306c755%27/%3E%3C/svg%3E">
+<style>
+  :root { --bg:#fff8ec; --card:#fff; --text:#3b1f0a; --muted:#7a5a3f; --line:#f1dcc0; --ok:#1a9c4a; --warn:#d9480f; --wait:#c25e00; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#1d1308; --card:#2a1c0e; --text:#fbefdc; --muted:#c9ab88; --line:#4a3319; --ok:#3ddc84; --warn:#ff8a5c; --wait:#ffa31f; } }
+  * { box-sizing:border-box; }
+  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center; padding:16px;
+         background:var(--bg); color:var(--text); text-align:center;
+         font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans Thai","Sarabun",sans-serif; }
+  .card { max-width:420px; width:100%; background:var(--card); border:1px solid var(--line); border-radius:22px; padding:28px 22px; }
+  h1 { font-size:20px; margin:0 0 14px; }
+  .pill { display:inline-flex; align-items:center; gap:10px; padding:10px 18px; border-radius:999px; font-weight:700; border:2px solid var(--wait); color:var(--wait); }
+  .dot { width:12px; height:12px; border-radius:50%; background:currentColor; }
+  .pill.ok { color:var(--ok); border-color:var(--ok); } .pill.ok .dot { animation:pulse 2s infinite; }
+  .pill.warn { color:var(--warn); border-color:var(--warn); }
+  @keyframes pulse { 50% { opacity:.35; } }
+  p { margin:14px 0 0; color:var(--muted); font-size:14px; }
+  @media (prefers-reduced-motion:reduce) { .dot { animation:none !important; } }
+</style>
+</head>
+<body>
+<main class="card">
+  <h1>API</h1>
+  <div id="pill" class="pill" role="status" aria-live="polite"><span class="dot"></span><span id="label">กำลังตรวจสอบ…</span></div>
+  <p id="detail">ตรวจสอบสถานะระบบ</p>
+</main>
+<script>
+  // While a deploy runs the host serves app_offline.htm ("กำลังอัปเดต") instead of this page.
+  // If this page is already open when that happens, the health call fails or returns a non-JSON page → show "updating".
+  var pill = document.getElementById('pill'), label = document.getElementById('label'), detail = document.getElementById('detail');
+  function set(cls, text, sub) { pill.className = 'pill ' + cls; label.textContent = text; detail.textContent = sub; }
+  function check() {
+    fetch('health', { cache: 'no-store' }).then(function (r) {
+      return r.json().then(function (j) { return { status: r.status, j: j }; });
+    }).then(function (x) {
+      if (x.j && x.j.ok) set('ok', 'API ออนไลน์', 'ระบบพร้อมใช้งาน');
+      else set('warn', 'API ออนไลน์ แต่ฐานข้อมูลมีปัญหา', 'กำลังตรวจสอบ ลองใหม่อีกครั้งในอีกสักครู่');
+    }).catch(function () { set('', 'API กำลังอัปเดต', 'จะกลับมาออนไลน์ในอีกสักครู่ หน้านี้รีเฟรชเอง'); })
+      .then(function () { setTimeout(check, 15000); });
+  }
+  check();
+</script>
+</body>
+</html>

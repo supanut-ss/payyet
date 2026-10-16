@@ -1,0 +1,76 @@
+{
+  "size": {
+    "width": 2500,
+    "height": 1686
+  },
+  "selected": true,
+  "name": "PayYet main menu",
+  "chatBarText": "เมนู",
+  "areas": [
+    {
+      "bounds": {
+        "x": 0,
+        "y": 0,
+        "width": 1250,
+        "height": 906
+      },
+      "action": {
+        "type": "message",
+        "label": "เก็บเงิน",
+        "text": "เก็บเงิน"
+      }
+    },
+    {
+      "bounds": {
+        "x": 1250,
+        "y": 0,
+        "width": 1250,
+        "height": 906
+      },
+      "action": {
+        "type": "message",
+        "label": "ยอดค้าง",
+        "text": "ยอดค้าง"
+      }
+    },
+    {
+      "bounds": {
+        "x": 0,
+        "y": 906,
+        "width": 833,
+        "height": 780
+      },
+      "action": {
+        "type": "uri",
+        "label": "เปิดแอป",
+        "uri": "https://liff.line.me/2012050838-2dLAG81A"
+      }
+    },
+    {
+      "bounds": {
+        "x": 833,
+        "y": 906,
+        "width": 834,
+        "height": 780
+      },
+      "action": {
+        "type": "message",
+        "label": "พร้อมเพย์",
+        "text": "พร้อมเพย์"
+      }
+    },
+    {
+      "bounds": {
+        "x": 1667,
+        "y": 906,
+        "width": 833,
+        "height": 780
+      },
+      "action": {
+        "type": "message",
+        "label": "วิธีใช้",
+        "text": "วิธีใช้"
+      }
+    }
+  ]
+}
