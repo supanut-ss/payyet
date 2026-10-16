@@ -72,7 +72,9 @@ public class WebhookProcessor(
             case "message" when userId != null:
                 var msg = Prop(ev, "message");
                 var text = Str(msg, "type") == "text" ? Str(msg, "text") : null;
-                if (srcType == "group" && groupId != null) await OnGroupMessageAsync(groupId, userId, replyToken, text);
+                var tags = new List<string>();
+                if (text != null) text = StripMentions(text, Prop(msg, "mention"), tags);
+                if (srcType == "group" && groupId != null) await OnGroupMessageAsync(groupId, userId, replyToken, text, tags);
                 else if (srcType == "user") await OnUserMessageAsync(userId, replyToken, text);
                 break;
 
@@ -95,42 +97,144 @@ public class WebhookProcessor(
             await line.ReplyAsync(replyToken, Msg.Text(
                 "สวัสดีครับ 👋 ผมช่วยเก็บเงินในกลุ่มนี้\n" +
                 "ขอให้ทุกคนพิมพ์อะไรก็ได้ 1 ข้อความ เพื่อให้บอทรู้จัก (ไม่ต้องเพิ่มเพื่อนบอท)\n" +
-                "คนเก็บเงินสั่งเก็บได้ที่แชทส่วนตัวกับบอท"));
+                "สั่งเก็บเงินได้เลย เช่น หาร ค่าข้าว 500 หรือ เก็บ ค่าข้าว 100 (ต้องตั้งพร้อมเพย์กับบอทก่อน)"));
     }
 
-    private async Task OnGroupMessageAsync(string groupId, string userId, string? replyToken, string? text)
+    private async Task OnGroupMessageAsync(string groupId, string userId, string? replyToken, string? text, List<string> tags)
     {
-        var (_, group) = await members.TouchAsync(groupId, userId);
+        var (me, group) = await members.TouchAsync(groupId, userId);
         if (text == null || replyToken == null) return;
         text = text.Trim();
 
-        if (text is "ยอด" or "ยอดค้าง")
+        if (IsHelp(text))
         {
-            await line.ReplyAsync(replyToken, Msg.Text(await GroupStatusAsync(group)));
+            await line.ReplyAsync(replyToken, Msg.Text(GroupHelp));
+        }
+        else if (text is "ยอด" or "ยอดค้าง")
+        {
+            await ReplyWithTagAsync(replyToken, await GroupStatusAsync(group, me), "ยอดค้างของ", me);
         }
         else if (Regex.IsMatch(text, @"^(เก็บ(เงิน)?|หาร(เท่า)?)\s+.*[\d๐-๙]"))
         {
-            await line.ReplyAsync(replyToken, Msg.Text("สร้างบิลได้ที่แชทส่วนตัวกับบอทเท่านั้นนะครับ (เพื่อไม่ให้กลุ่มรก)"));
+            await StartGroupCreateAsync(me, group, replyToken, text, tags);
         }
     }
 
-    private async Task<string> GroupStatusAsync(ChatGroup group)
-    {
-        var open = await db.Bills.Include(b => b.Creator)
-            .Where(b => b.GroupId == group.Id && b.Status == BillStatus.OPEN).ToListAsync();
-        if (open.Count == 0) return "ตอนนี้ไม่มีบิลค้างในกลุ่มนี้ 🎉";
+    private static bool IsHelp(string text) =>
+        text.Equals("payyet", StringComparison.OrdinalIgnoreCase) || text.Equals("help", StringComparison.OrdinalIgnoreCase) || text == "วิธีใช้";
 
-        var sb = new System.Text.StringBuilder();
-        foreach (var bill in open)
+    private const string GroupHelp =
+        "📖 PayYet วิธีใช้ในกลุ่ม" + "\n" +
+        "• เก็บ ค่าข้าว 200 → เก็บคนละ 200 แล้วเลือกคน" + "\n" +
+        "• หาร ค่าเครื่องดื่ม 300 → หารยอดรวมตามคนที่เลือก" + "\n" +
+        "• เก็บ ค่าข้าว 200 ทุกคน → เก็บทุกคนในกลุ่มทันที" + "\n" +
+        "• หาร 300 ทุกคน ยกเว้น ต้น → ทุกคนยกเว้นชื่อที่พิมพ์" + "\n" +
+        "• เก็บ ค่าข้าว 200 @คน @คน → เก็บเฉพาะคนที่แท็ก" + "\n" +
+        "• หาร 300 ยกเว้น @คน → ทุกคนยกเว้นคนที่แท็ก" + "\n" +
+        "• ยอด → ดูยอดค้างของตัวเอง" + "\n" +
+        "ต้องตั้งพร้อมเพย์ก่อนเก็บเงิน · พิมพ์ help ในแชทส่วนตัวกับบอทเพื่อดูแบบละเอียด";
+
+    private string PrivateHelp()
+    {
+        var web = options.Value.App.WebBaseUrl.TrimEnd('/');
+        return
+            "📖 PayYet วิธีใช้" + "\n\n" +
+            "ตั้งค่าครั้งแรก" + "\n" +
+            "• พร้อมเพย์ 0812345678 → ตั้งเลขรับเงิน (หรือกดปุ่มพร้อมเพย์ในเมนู)" + "\n" +
+            "• ชวนบอทเข้ากลุ่ม แล้วให้ทุกคนพิมพ์ข้อความ 1 ครั้ง บอทจะรู้จักสมาชิก" + "\n\n" +
+            "สั่งเก็บเงิน (ในกลุ่มหรือแชทนี้)" + "\n" +
+            "• เก็บ ค่าข้าว 200 → เก็บคนละ 200 แล้วเลือกคน" + "\n" +
+            "• หาร ค่าเครื่องดื่ม 300 → หารยอดรวมตามคนที่เลือก แก้ยอดรายคนได้" + "\n" +
+            "• เก็บ ค่าข้าว 200 ทุกคน / หาร 300 ทุกคน ยกเว้น ต้น" + "\n" +
+            "• เก็บ ค่าข้าว สมชาย 100 มาลี 150 → ระบุยอดรายคน" + "\n" +
+            "• ในกลุ่ม: แท็กชื่อ เช่น เก็บ ค่าข้าว 200 @สมชาย หรือ หาร 300 ยกเว้น @ต้น" + "\n\n" +
+            "ดูและจัดการ" + "\n" +
+            "• ยอด → ที่ฉันต้องจ่าย / ที่คนอื่นค้างฉัน" + "\n" +
+            "• จัดการ → รับเงินสด ยกหนี้ ยกเลิกรายการหรือบิล" + "\n" +
+            "• ผู้จ่ายกด \"จ่ายเงิน\" บนการ์ด สแกน QR แล้วแนบสลิป ผู้เก็บกดยืนยัน" + "\n" +
+            "• บอทเตือนคนที่ยังไม่จ่ายทุกวัน 10:00" + "\n\n" +
+            $"รายละเอียดทั้งหมด: {web}/" + "\n" +
+            $"เปิดแอป: https://liff.line.me/{options.Value.Liff.Id}?mode=help";
+    }
+
+    // A card posted in a group is followed by a tag of the person it is about.
+    private async Task ReplyWithTagAsync(string replyToken, object card, string prefix, AppUser who)
+    {
+        var tag = Msg.Mention(prefix, new[] { who.LineUserId });
+        if (tag == null) await line.ReplyAsync(replyToken, card);
+        else await line.ReplyAsync(replyToken, card, tag);
+    }
+
+    // "เก็บ/หาร ..." typed in a group: a pick card is posted in the group, the collector picks people (and can edit each amount) on the page,
+    // Needs the collector's PromptPay first.
+    private async Task StartGroupCreateAsync(AppUser me, ChatGroup group, string replyToken, string text, List<string> tags)
+    {
+        var liffBase = $"https://liff.line.me/{options.Value.Liff.Id}";
+        if (string.IsNullOrEmpty(me.PromptPayId))
         {
-            var items = await db.BillItems.Include(i => i.Debtor).Where(i => i.BillId == bill.Id).ToListAsync();
-            var paid = items.Count(i => i.IsSettled);
-            sb.AppendLine($"💰 บิลของ {bill.Creator.Name} (จ่ายแล้ว {paid}/{items.Count})");
-            foreach (var i in items.Where(i => !i.IsSettled))
-                sb.AppendLine($"  • {i.Debtor?.Name}: ฿{Money.Format(i.Remaining)}{(i.Status == ItemStatus.SUBMITTED ? " ⏳ รอตรวจ" : "")}");
-            sb.AppendLine();
+            await line.ReplyAsync(replyToken, Msg.Text($"{me.Name} ยังไม่ได้ตั้งพร้อมเพย์ ⚠️\nตั้งก่อนเก็บเงินได้ที่ {liffBase}?mode=promptpay\nหรือพิมพ์ในแชทส่วนตัวกับบอท: พร้อมเพย์ 0812345678"));
+            return;
         }
-        return sb.ToString().TrimEnd();
+
+        // Tagged people are exact: create the bill right away ("ยกเว้น" = everyone else in the group).
+        if (tags.Count > 0)
+        {
+            var exclude = Regex.IsMatch(text, @"(^|\s)ยกเว้น(\s|$)");
+            var tagged = await drafts.BuildFromTagsAsync(me, text, group.Id, tags, exclude);
+            if (tagged.Error != null || tagged.Draft == null)
+            {
+                await line.ReplyAsync(replyToken, Msg.Text(tagged.Error ?? "สั่งเก็บไม่สำเร็จ ลองใหม่อีกครั้ง"));
+                return;
+            }
+            var made = await creation.CreateAsync(me, tagged.Draft);
+            await line.PushAsync(me.LineUserId, Cards.Created(options.Value, "สร้างบิลแล้ว", made.Summary,
+                made.Undo.Select(u => (u.Label, $"act=undo&c={u.ChargeId}"))));
+            return;
+        }
+
+        var result = await drafts.BuildAsync(me, text, group.Id, alwaysPick: true);
+        if (result.Error != null || result.Draft == null)
+        {
+            await line.ReplyAsync(replyToken, Msg.Text(result.Error ?? "สั่งเก็บไม่สำเร็จ ลองใหม่อีกครั้ง"));
+            return;
+        }
+
+        var draft = result.Draft;
+        if (result.NeedPick)
+        {
+            // The card is posted in the group; only the collector's own state can be used on the page, so others tapping it get "expired".
+            await SetStateAsync(me.Id, "PICK", "pick", draft);
+            var what = draft.PerPerson ? $"เก็บคนละ ฿{Money.Format(draft.AmountSatang)}" : $"หาร ฿{Money.Format(draft.AmountSatang)}";
+            await ReplyWithTagAsync(replyToken, Cards.PickPrompt(options.Value, draft.Title, what, $"{liffBase}?mode=pick", me.Name, allowCancel: false), "เลือกคนที่จะเก็บเงิน", me);
+            return;
+        }
+
+        // "ทุกคน" / "ยกเว้น ..." for the whole group: nothing left to choose, so create it right away.
+        if (draft.Dest == "G" && !draft.Custom)
+        {
+            var made = await creation.CreateAsync(me, draft);
+            await line.PushAsync(me.LineUserId, Cards.Created(options.Value, "สร้างบิลแล้ว", made.Summary,
+                made.Undo.Select(u => (u.Label, $"act=undo&c={u.ChargeId}"))));
+            return;
+        }
+
+        await SetStateAsync(me.Id, "CONFIRM", "confirm", draft);
+        if (await line.PushAsync(me.LineUserId, await ConfirmCardAsync(me, draft)))
+            await line.ReplyAsync(replyToken, Msg.Text($"{me.Name} ส่งการ์ดยืนยันไปที่แชทส่วนตัวกับบอทแล้ว 📩"));
+        else
+            await line.ReplyAsync(replyToken, Msg.Text("บอทส่งข้อความหาคุณไม่ได้ กรุณาเพิ่มบอทเป็นเพื่อนก่อน แล้วสั่งใหม่อีกครั้ง"));
+    }
+
+    // Only the asker's own unpaid amounts in this group; other people's balances are never posted to the group.
+    private async Task<object> GroupStatusAsync(ChatGroup group, AppUser me)
+    {
+        var mine = await db.BillItems.Include(i => i.Bill).ThenInclude(b => b.Creator)
+            .Where(i => i.DebtorId == me.Id && i.Bill.GroupId == group.Id && i.Bill.Status == BillStatus.OPEN)
+            .ToListAsync();
+        var lines = mine.Where(i => !i.IsSettled)
+            .Select(i => new Cards.OwedLine(i.Bill.Creator.Name, i.Status == ItemStatus.SUBMITTED ? RowState.Submitted : RowState.Pending, i.Remaining))
+            .ToList();
+        return Cards.MyBalance(options.Value, me.Name, lines, $"https://liff.line.me/{options.Value.Liff.Id}?mode=owe");
     }
 
     // ───────────────────────── private chat ─────────────────────────
@@ -150,6 +254,12 @@ public class WebhookProcessor(
         if (promptPay.Success)
         {
             await SetPromptPayAsync(user, replyToken, promptPay.Groups["id"].Value);
+            return;
+        }
+
+        if (IsHelp(text))
+        {
+            await line.ReplyAsync(replyToken, Msg.Text(PrivateHelp()));
             return;
         }
 
@@ -386,6 +496,24 @@ public class WebhookProcessor(
     {
         var s = await db.States.FindAsync(userId);
         if (s != null) { db.States.Remove(s); await db.SaveChangesAsync(); }
+    }
+
+    /// <summary>Removes "@name" mentions from a user's text (so the parser sees plain words) and collects the tagged user ids.</summary>
+    private static string StripMentions(string text, JsonElement mention, List<string> tagged)
+    {
+        var arr = Prop(mention, "mentionees");
+        if (arr.ValueKind != JsonValueKind.Array) return text;
+        var ranges = new List<(int Index, int Length)>();
+        foreach (var m in arr.EnumerateArray())
+        {
+            if (Str(m, "type") != "user" || Str(m, "userId") is not { } uid) continue;
+            tagged.Add(uid);
+            if (Prop(m, "index").TryGetInt32(out var idx) && Prop(m, "length").TryGetInt32(out var len) && idx >= 0 && len > 0 && idx + len <= text.Length)
+                ranges.Add((idx, len));
+        }
+        foreach (var (idx, len) in ranges.OrderByDescending(r => r.Index))
+            text = text.Remove(idx, len);
+        return text.Trim();
     }
 
     private static List<JsonElement> Members(JsonElement ev, string key)

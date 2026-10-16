@@ -91,7 +91,7 @@ public class MediaController(AppDbContext db, PaymentService payments) : Control
 /// <summary>Endpoints used by the LIFF pay page. Identity always comes from a verified LINE ID token.</summary>
 [ApiController]
 [Route("api/pay")]
-public class PayController(AppDbContext db, LineClient line, PaymentService payments, IOptions<AppSettings> options) : ControllerBase
+public class PayController(AppDbContext db, LineClient line, PaymentService payments, BillCreationService creation, IOptions<AppSettings> options) : ControllerBase
 {
     [HttpGet("config")]
     public IActionResult Config() => Ok(new { liffId = options.Value.Liff.Id, oaUrl = options.Value.App.LineOaUrl });
@@ -141,7 +141,7 @@ public class PayController(AppDbContext db, LineClient line, PaymentService paym
         });
     }
 
-    public record PickRequest(List<long>? UserIds, string? Dest);
+    public record PickRequest(List<long>? UserIds, string? Dest, Dictionary<long, decimal>? Amounts);
 
     /// <summary>People-picker page: who can this collector bill, and what is being billed.</summary>
     [HttpGet("pick")]
@@ -157,30 +157,37 @@ public class PayController(AppDbContext db, LineClient line, PaymentService paym
             title = proto!.Title,
             amountSatang = proto.AmountSatang,
             perPerson = proto.PerPerson,
+            groupId = proto.GroupId,
             groups = cand.Groups
         });
     }
 
-    /// <summary>The collector's choice: people and where to announce. The confirm card is pushed to their chat.</summary>
+    /// <summary>
+    /// The collector's choice from the picker page. The page is the confirmation, so the bill is created right away;
+    /// the result (with undo buttons) is also pushed to the collector's private chat.
+    /// </summary>
     [HttpPost("pick")]
-    public async Task<IActionResult> Pick([FromBody] PickRequest req, [FromServices] DraftService drafts, [FromServices] DraftCardBuilder draftCards)
+    public async Task<IActionResult> Pick([FromBody] PickRequest req, [FromServices] DraftService drafts)
     {
         var (user, proto, error) = await LoadPickAsync();
         if (error != null) return error;
+        if (string.IsNullOrEmpty(user!.PromptPayId))
+            return BadRequest(new { error = "ตั้งเลขพร้อมเพย์สำหรับรับเงินก่อน" });
 
-        var result = await drafts.BuildFromSelectionAsync(user!, proto!, req.UserIds ?? new List<long>(), req.Dest);
+        var result = await drafts.BuildFromSelectionAsync(user, proto!, req.UserIds ?? new List<long>(), req.Dest, req.Amounts);
         if (result.Error != null) return BadRequest(new { error = result.Error });
 
-        var draft = result.Draft!;
-        var state = (await db.States.FindAsync(user!.Id))!;
-        state.Flow = "CONFIRM";
-        state.Step = "confirm";
-        state.Data = JsonSerializer.Serialize(draft);
-        state.ExpiresAt = DateTime.UtcNow.AddMinutes(30);
-        await db.SaveChangesAsync();
+        var state = await db.States.FindAsync(user.Id);
+        if (state != null) { db.States.Remove(state); await db.SaveChangesAsync(); }   // clear first: a double tap cannot create it twice
 
-        await line.PushAsync(user.LineUserId, await draftCards.BuildAsync(user, draft));
-        return Ok(new { message = "ส่งการ์ดยืนยันไปที่แชทแล้ว" });
+        var created = await creation.CreateAsync(user, result.Draft!);
+        await line.PushAsync(user.LineUserId, Cards.Created(options.Value, "สร้างบิลแล้ว", created.Summary,
+            created.Undo.Select(u => (u.Label, $"act=undo&c={u.ChargeId}"))));
+        return Ok(new
+        {
+            summary = created.Summary,
+            undo = created.Undo.Select(u => new { label = u.Label, chargeId = u.ChargeId })
+        });
     }
 
     private async Task<(AppUser? User, Draft? Proto, IActionResult? Error)> LoadPickAsync()
@@ -272,7 +279,9 @@ public class ManageController(AppDbContext db, LineClient line, BillManageServic
             ? $"✅ {name} จ่ายแล้ว (รับเงินกับผู้เก็บโดยตรง) · บิลของ {user.Name}"
             : $"💵 {name} จ่ายบางส่วนแล้ว คงเหลือ ฿{Money.Format(item.Remaining)} · บิลของ {user.Name}";
         if (done) text += "\n🎉 ทุกคนจ่ายครบแล้ว บิลปิดเรียบร้อย";
-        await Announce(r.Bill, text, item);
+        // A payment is not announced in the group: the card is rebuilt from the database, so the next reminder shows who has paid.
+        // Only the final "everyone paid" notice goes out right away.
+        if (!r.Bill.GroupId.HasValue || done) await Announce(r.Bill, text, item);
         return Ok(new { message = r.Message });
     }
 
@@ -305,7 +314,7 @@ public class ManageController(AppDbContext db, LineClient line, BillManageServic
         else if (bill.GroupId.HasValue)
         {
             var group = await db.Groups.FindAsync(bill.GroupId.Value);
-            if (group is { Active: true }) await line.PushAsync(group.LineGroupId, await cards.BuildAsync(bill, "↩️ ยกเลิกรายการ"));
+            if (group is { Active: true }) await line.PushAsync(group.LineGroupId, await cards.BuildForGroupAsync(bill, "↩️ ยกเลิกรายการ"));
         }
         else
         {

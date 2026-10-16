@@ -68,6 +68,57 @@ public class PickerFlowTests : DbTestBase
     }
 
     [Fact]
+    public async Task Typed_in_a_group_the_picker_is_always_used_and_remembers_the_group()
+    {
+        var svc = new DraftService(Db);
+
+        var withName = await svc.BuildAsync(_me, "เก็บ ค่าข้าว 200 เอ", _group.Id, alwaysPick: true);
+        Assert.True(withName.NeedPick);                       // names are chosen on the page, even if one was typed
+        Assert.Equal(_group.Id, withName.Draft!.GroupId);     // the page opens on this group
+        Assert.Equal(20000, withName.Draft.AmountSatang);
+
+        var plain = await svc.BuildAsync(_me, "หาร ค่าเครื่องดื่ม 300", _group.Id, alwaysPick: true);
+        Assert.True(plain.NeedPick);
+        Assert.Equal(_group.Id, plain.Draft!.GroupId);
+
+        Assert.False((await svc.BuildAsync(_me, "หาร 300 ทุกคน", _group.Id, alwaysPick: true)).NeedPick);   // explicit "everyone" is honoured
+    }
+
+    [Fact]
+    public async Task Edited_amounts_make_a_custom_bill_and_are_validated()
+    {
+        var svc = new DraftService(Db);
+        var proto = (await svc.BuildAsync(_me, "หาร ค่าข้าว 300")).Draft!;
+        var ids = new[] { _a.Id, _b.Id };
+
+        var ok = await svc.BuildFromSelectionAsync(_me, proto, ids, "P", new Dictionary<long, decimal> { [_a.Id] = 200m, [_b.Id] = 100m });
+        Assert.True(ok.Draft!.Custom);
+        Assert.Equal(new long[] { 20000, 10000 }, ok.Draft.ComputeShares().Select(x => x.Satang).ToArray());
+
+        Assert.NotNull((await svc.BuildFromSelectionAsync(_me, proto, ids, "P", new Dictionary<long, decimal> { [_a.Id] = 200m })).Error);                      // someone missing
+        Assert.NotNull((await svc.BuildFromSelectionAsync(_me, proto, ids, "P", new Dictionary<long, decimal> { [_a.Id] = 0m, [_b.Id] = 100m })).Error);        // zero amount
+        Assert.False((await svc.BuildFromSelectionAsync(_me, proto, ids, "P")).Draft!.Custom);                                                                   // untouched = equal split
+    }
+
+    [Fact]
+    public async Task Tagged_people_are_exact_and_exclusion_means_everyone_else()
+    {
+        var svc = new DraftService(Db);
+
+        var only = await svc.BuildFromTagsAsync(_me, "เก็บ ค่าข้าว 200", _group.Id, new[] { _a.LineUserId }, exclude: false);
+        Assert.Null(only.Error);
+        Assert.Equal(new[] { _a.Id }, only.Draft!.Debtors.Select(d => d.UserId).ToArray());
+        Assert.Equal("G", only.Draft.Dest);
+        Assert.Equal("ค่าข้าว", only.Draft.Title);
+
+        var rest = await svc.BuildFromTagsAsync(_me, "หาร ค่าข้าว 300 ยกเว้น", _group.Id, new[] { _a.LineUserId }, exclude: true);
+        Assert.Equal(new[] { _b.Id }, rest.Draft!.Debtors.Select(d => d.UserId).ToArray());   // group has me, a, b → everyone but me and a
+
+        Assert.NotNull((await svc.BuildFromTagsAsync(_me, "เก็บ ค่าข้าว 200", _group.Id, new[] { _outsider.LineUserId }, exclude: false)).Error);   // not a known member
+        Assert.NotNull((await svc.BuildFromTagsAsync(_me, "เก็บ ค่าข้าว", _group.Id, new[] { _a.LineUserId }, exclude: false)).Error);                 // no amount
+    }
+
+    [Fact]
     public async Task Total_is_divided_by_the_number_of_people_picked()
     {
         var svc = new DraftService(Db);

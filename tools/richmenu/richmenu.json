@@ -12,12 +12,12 @@
         "x": 0,
         "y": 0,
         "width": 1250,
-        "height": 906
+        "height": 923
       },
       "action": {
-        "type": "message",
+        "type": "uri",
         "label": "เก็บเงิน",
-        "text": "เก็บเงิน"
+        "uri": "https://liff.line.me/2012050838-2dLAG81A?mode=new"
       }
     },
     {
@@ -25,51 +25,51 @@
         "x": 1250,
         "y": 0,
         "width": 1250,
-        "height": 906
+        "height": 923
       },
       "action": {
-        "type": "message",
+        "type": "uri",
         "label": "ยอดค้าง",
-        "text": "ยอดค้าง"
+        "uri": "https://liff.line.me/2012050838-2dLAG81A?mode=owe"
       }
     },
     {
       "bounds": {
         "x": 0,
-        "y": 906,
+        "y": 923,
         "width": 833,
-        "height": 780
+        "height": 763
       },
       "action": {
         "type": "uri",
         "label": "เปิดแอป",
-        "uri": "https://liff.line.me/2012050838-2dLAG81A"
+        "uri": "https://liff.line.me/2012050838-2dLAG81A?mode=home"
       }
     },
     {
       "bounds": {
         "x": 833,
-        "y": 906,
+        "y": 923,
         "width": 834,
-        "height": 780
+        "height": 763
       },
       "action": {
-        "type": "message",
+        "type": "uri",
         "label": "พร้อมเพย์",
-        "text": "พร้อมเพย์"
+        "uri": "https://liff.line.me/2012050838-2dLAG81A?mode=promptpay"
       }
     },
     {
       "bounds": {
         "x": 1667,
-        "y": 906,
+        "y": 923,
         "width": 833,
-        "height": 780
+        "height": 763
       },
       "action": {
-        "type": "message",
+        "type": "uri",
         "label": "วิธีใช้",
-        "text": "วิธีใช้"
+        "uri": "https://payyet.drivetodev.online/"
       }
     }
   ]

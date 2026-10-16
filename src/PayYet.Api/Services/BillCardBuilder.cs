@@ -11,6 +11,17 @@ public class BillCardBuilder(AppDbContext db, IOptions<AppSettings> options)
 {
     public string LiffUrl(string billToken) => $"https://liff.line.me/{options.Value.Liff.Id}?b={billToken}";
 
+    /// <summary>The card for a group chat followed by a message tagging everyone on it who still has to pay.</summary>
+    public async Task<object[]> BuildForGroupAsync(Bill bill, string headline)
+    {
+        var card = await BuildAsync(bill, headline);
+        var debtors = await db.BillItems.Where(i => i.BillId == bill.Id && i.DebtorId != null)
+            .Include(i => i.Debtor).ToListAsync();
+        var owing = debtors.Where(i => !i.IsSettled && i.Debtor != null).Select(i => i.Debtor!.LineUserId);
+        var tag = Msg.Mention(headline, owing);
+        return tag == null ? new[] { card } : new[] { card, tag };
+    }
+
     /// <summary>Flex card listing the bill's items and every person's remaining amount.</summary>
     public async Task<object> BuildAsync(Bill bill, string headline, long? onlyDebtorId = null)
     {

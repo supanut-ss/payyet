@@ -18,7 +18,7 @@ public class AppController(AppDbContext db, LineClient line, DraftService drafts
     private const decimal MaxAmountBaht = 1_000_000m;
 
     public record PromptPayRequest(string? Id);
-    public record CreateRequest(string? Title, decimal Amount, bool PerPerson, List<long>? UserIds, string? Dest);
+    public record CreateRequest(string? Title, decimal Amount, bool PerPerson, List<long>? UserIds, string? Dest, Dictionary<long, decimal>? Amounts = null);
     public record UndoRequest(long ChargeId);
 
     [HttpGet("home")]
@@ -55,6 +55,14 @@ public class AppController(AppDbContext db, LineClient line, DraftService drafts
         if (string.IsNullOrWhiteSpace(req.Id) || !PromptPay.IsValidId(req.Id))
             return BadRequest(new { error = "ใช้เบอร์มือถือ 10 หลัก หรือเลขบัตรประชาชน 13 หลัก" });
 
+        // The collector must have added the bot as a friend: slips and receipts are sent to them privately.
+        if (!user.IsFriend)
+        {
+            if (await line.GetProfileAsync(user.LineUserId) == null)
+                return BadRequest(new { error = "ต้องเพิ่มบอทเป็นเพื่อนก่อน จึงจะรับสลิปและแจ้งเตือนได้", needFriend = true, oaUrl = await line.GetOaUrlAsync() });
+            user.IsFriend = true;
+        }
+
         user.PromptPayId = new string(req.Id.Where(char.IsDigit).ToArray());
         await db.SaveChangesAsync();
         return Ok(new { message = "บันทึกพร้อมเพย์แล้ว", promptPayMasked = Mask(user.PromptPayId) });
@@ -87,7 +95,7 @@ public class AppController(AppDbContext db, LineClient line, DraftService drafts
         if (title.Length > 80) title = title[..80];
 
         var proto = new Draft { Title = title, PerPerson = req.PerPerson, AmountSatang = Money.ToSatang(req.Amount) };
-        var result = await drafts.BuildFromSelectionAsync(user, proto, req.UserIds ?? new List<long>(), req.Dest);
+        var result = await drafts.BuildFromSelectionAsync(user, proto, req.UserIds ?? new List<long>(), req.Dest, req.Amounts);
         if (result.Error != null) return BadRequest(new { error = result.Error });
 
         var created = await creation.CreateAsync(user, result.Draft!);

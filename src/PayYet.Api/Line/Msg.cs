@@ -62,6 +62,21 @@ public static class Msg
 
     public static object Image(string url) => new { type = "image", originalContentUrl = url, previewImageUrl = url };
 
+    /// <summary>Text message that tags (@mentions) the given LINE users, sent right after a card posted in a group. Null when nobody to tag.</summary>
+    public static object? Mention(string prefix, IEnumerable<string> lineUserIds)
+    {
+        var ids = lineUserIds.Where(i => !string.IsNullOrEmpty(i)).Distinct().Take(100).ToList();
+        if (ids.Count == 0) return null;
+        var text = new System.Text.StringBuilder(Trunc(prefix, 200));
+        var substitution = new Dictionary<string, object>();
+        for (var i = 0; i < ids.Count; i++)
+        {
+            text.Append(" {u").Append(i).Append('}');
+            substitution["u" + i] = new { type = "mention", mentionee = new { type = "user", userId = ids[i] } };
+        }
+        return new { type = "textV2", text = text.ToString(), substitution };
+    }
+
     public static object Flex(string altText, object bubble) => new { type = "flex", altText = Trunc(altText, 400), contents = bubble };
 
     public static string Trunc(string s, int max) => s.Length <= max ? s : s[..(max - 1)] + "…";

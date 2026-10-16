@@ -50,7 +50,7 @@ public class DraftService(AppDbContext db)
     public const string HelpText =
         "พิมพ์เช่น\n• เก็บ ค่าอาหาร 200  (เก็บคนละ 200 แล้วเลือกคนในหน้าถัดไป)\n• หาร ค่าเครื่องดื่ม 300  (หาร 300 ตามจำนวนคนที่เลือก)\n• หาร 600 ค่าข้าว ทุกคน  หรือ  หาร 600 ยกเว้น สมชาย\n• เก็บ 200 สมชาย  (ระบุชื่อเลย ไม่ต้องเลือก)\n• เก็บ สมชาย 200 มาลี 300  (ยอดต่างกันรายคน)";
 
-    public async Task<DraftResult> BuildAsync(AppUser collector, string text, long? forcedGroupId = null)
+    public async Task<DraftResult> BuildAsync(AppUser collector, string text, long? forcedGroupId = null, bool alwaysPick = false)
     {
         var parsed = QuickEntryParser.Parse(text);
         if (parsed == null || parsed.IsEmpty) return Fail(HelpText);
@@ -125,13 +125,16 @@ public class DraftService(AppDbContext db)
 
         // Without names, "ทุกคน", an exclusion list or a group name, the collector picks the people (checkbox page in LINE)
         // and the bill is split by the number of people picked.
-        var wantsEveryone = parsed.Everyone || parsed.ExcludedWords.Count > 0 || groupWord != null || forcedGroupId.HasValue;
-        if (pairs.Count == 0 && named.Count == 0 && !wantsEveryone)
+        var wantsEveryone = parsed.Everyone || parsed.ExcludedWords.Count > 0 || groupWord != null || (forcedGroupId.HasValue && !alwaysPick);
+        // alwaysPick (typed in a group): names are chosen on the picker page, like a private command; only custom "name amount" pairs skip it.
+        var explicitEveryone = parsed.Everyone || parsed.ExcludedWords.Count > 0;
+        if (pairs.Count == 0 && ((alwaysPick && !explicitEveryone) || (named.Count == 0 && !wantsEveryone)))
         {
             if (amountToken == null) return Fail("ไม่พบยอดเงิน ลองพิมพ์เช่น หาร ค่าเครื่องดื่ม 300 หรือ เก็บ ค่าอาหาร 200");
             var proto = new Draft
             {
                 Dest = "?",
+                GroupId = chosen?.Id,
                 PerPerson = parsed.PerPerson,
                 AmountSatang = Money.ToSatang(amountToken.Value),
                 Title = titleWords.Count > 0 ? string.Join(" ", titleWords) : $"ยอดเรียกเก็บ {BangkokTime.Today:d/M}"
@@ -196,6 +199,38 @@ public class DraftService(AppDbContext db)
         return new DraftResult(draft, null, null);
     }
 
+    /// <summary>
+    /// Group command that tags people ("เก็บ ค่าข้าว 200 @สมชาย @มาลี" or "... ยกเว้น @ต้น"): the tags are exact, so no picker is needed.
+    /// <paramref name="text"/> has the tags already cut out. Tagged people must be members the bot knows in that group.
+    /// </summary>
+    public async Task<DraftResult> BuildFromTagsAsync(AppUser collector, string text, long groupId, IReadOnlyCollection<string> taggedLineUserIds, bool exclude)
+    {
+        var parsed = QuickEntryParser.Parse(text);
+        if (parsed == null) return Fail(HelpText);
+        var amountToken = parsed.Tokens.FirstOrDefault(t => t.Kind == TokenKind.Number);
+        if (amountToken == null) return Fail("ไม่พบยอดเงิน ลองพิมพ์เช่น เก็บ ค่าข้าว 200 @สมชาย @มาลี");
+        var amount = Money.ToSatang(amountToken.Value);
+        if (amount <= 0) return Fail("ยอดเงินต้องมากกว่า 0");
+
+        var members = await db.GroupMembers.Where(m => m.GroupId == groupId && m.UserId != collector.Id)
+            .Include(m => m.User).Select(m => m.User).ToListAsync();
+        var tagged = members.Where(u => taggedLineUserIds.Contains(u.LineUserId)).ToList();
+        var unknown = taggedLineUserIds.Count(id => id != collector.LineUserId && members.All(u => u.LineUserId != id));
+        if (unknown > 0)
+            return Fail($"บอทยังไม่รู้จักคนที่แท็ก {unknown} คน ให้เขาพิมพ์ข้อความในกลุ่มก่อน แล้วสั่งใหม่");
+
+        var debtors = exclude ? members.Where(u => tagged.All(t => t.Id != u.Id)).ToList() : tagged;
+        if (debtors.Count == 0) return Fail(exclude ? "ยกเว้นแล้วไม่เหลือใครให้เก็บ" : "ไม่พบคนที่แท็ก (แท็กคนอื่นที่ไม่ใช่ตัวคุณ)");
+
+        var proto = new Draft
+        {
+            Title = string.Join(" ", parsed.Tokens.Where(t => t.Kind == TokenKind.Word).Select(t => t.Text)) is { Length: > 0 } t0 ? t0 : $"ยอดเรียกเก็บ {BangkokTime.Today:d/M}",
+            PerPerson = parsed.PerPerson,
+            AmountSatang = amount
+        };
+        return await BuildFromSelectionAsync(collector, proto, debtors.Select(u => u.Id).ToList(), $"G:{groupId}");
+    }
+
     private static string? Pic(string? url) => string.IsNullOrEmpty(url) ? null : url;
 
     /// <summary>Everyone the collector may bill: members of the collector's active groups.</summary>
@@ -220,7 +255,7 @@ public class DraftService(AppDbContext db)
     /// Only people the collector may bill are accepted - never trust ids sent by the browser.
     /// </summary>
     /// <param name="dest">"P" = private bills, "G:&lt;groupId&gt;" = one card in that group (everyone picked must be in it).</param>
-    public async Task<DraftResult> BuildFromSelectionAsync(AppUser collector, Draft proto, IReadOnlyCollection<long> userIds, string? dest)
+    public async Task<DraftResult> BuildFromSelectionAsync(AppUser collector, Draft proto, IReadOnlyCollection<long> userIds, string? dest, IReadOnlyDictionary<long, decimal>? amounts = null)
     {
         var ids = userIds.Distinct().ToList();
         if (ids.Count == 0) return Fail("ยังไม่ได้เลือกใคร");
@@ -237,6 +272,16 @@ public class DraftService(AppDbContext db)
             AmountSatang = proto.AmountSatang,
             Debtors = ids.Select(id => new DraftDebtor { UserId = id, Name = allowed[id].Name }).ToList()
         };
+
+        // Per-person amounts edited on the page (split or each-pays): the bill becomes a custom one.
+        if (amounts is { Count: > 0 })
+        {
+            if (ids.Any(id => !amounts.ContainsKey(id))) return Fail("ใส่ยอดให้ครบทุกคนที่เลือก");
+            if (ids.Any(id => amounts[id] <= 0 || amounts[id] > 1_000_000m)) return Fail("ยอดของแต่ละคนต้องมากกว่า 0 และไม่เกิน 1,000,000 บาท");
+            draft.Custom = true;
+            foreach (var d in draft.Debtors) d.Satang = Money.ToSatang(amounts[d.UserId]);
+            draft.AmountSatang = draft.Debtors.Sum(d => d.Satang ?? 0);
+        }
 
         if (dest != null && dest.StartsWith("G:", StringComparison.Ordinal) && long.TryParse(dest[2..], out var groupId))
         {

@@ -182,6 +182,57 @@ public static class Cards
         return Msg.Flex($"{headline} · เก็บโดย {creatorName}", bubble);
     }
 
+    // ───────── "my balance" card (shown in a group: only the asker's own amounts) ─────────
+
+    public record OwedLine(string CollectorName, RowState State, long RemainingSatang);
+
+    public static object MyBalance(AppSettings s, string name, IReadOnlyList<OwedLine> lines, string oweUrl)
+    {
+        var total = lines.Where(l => l.State != RowState.Submitted).Sum(l => l.RemainingSatang);
+        var body = new List<object>();
+        if (lines.Count == 0)
+        {
+            body.Add(new { type = "text", text = "ไม่มียอดค้างในกลุ่มนี้ 🎉", size = "md", weight = "bold", color = Theme.Green, wrap = true });
+        }
+        else
+        {
+            body.Add(new { type = "text", text = "ยังค้างจ่ายรวม", size = "xs", color = Theme.Muted });
+            body.Add(new { type = "text", text = "฿" + PayYet.Domain.Money.Format(total), size = "xxl", weight = "bold", color = total > 0 ? Theme.Red : Theme.Amber });
+            body.Add(new { type = "separator", margin = "md", color = Theme.Line });
+            foreach (var l in lines.Take(10))
+            {
+                object status = l.State == RowState.Submitted
+                    ? Pill("⏳ รอตรวจ", Theme.Amber, Theme.AmberSoft)
+                    : Pill("฿" + PayYet.Domain.Money.Format(l.RemainingSatang), Theme.Red, Theme.RedSoft);
+                body.Add(new
+                {
+                    type = "box", layout = "horizontal", margin = "md", alignItems = "center", spacing = "sm",
+                    contents = new object[]
+                    {
+                        new { type = "text", text = "บิลของ " + Msg.Trunc(l.CollectorName, 24), size = "sm", color = Theme.Brown, wrap = true, flex = 1 },
+                        status
+                    }
+                });
+            }
+            if (lines.Count > 10)
+                body.Add(new { type = "text", text = $"… และอีก {lines.Count - 10} รายการ", size = "xs", color = Theme.Muted, margin = "md" });
+        }
+
+        var bubble = new
+        {
+            type = "bubble",
+            size = "kilo",
+            header = new { type = "box", layout = "vertical", paddingAll = "0px", contents = new object[] { Header(LogoUrl(s), "ยอดค้างของ", name, lines.Count == 0 ? Theme.Green : Theme.Orange) } },
+            body = new { type = "box", layout = "vertical", paddingAll = "16px", contents = body.ToArray() },
+            footer = lines.Count == 0 ? null : (object)new
+            {
+                type = "box", layout = "vertical", paddingAll = "12px", backgroundColor = Theme.Cream,
+                contents = new object[] { Button("ดูและจ่ายเงิน", new { type = "uri", label = "ดูและจ่ายเงิน", uri = oweUrl }, "primary", Theme.Orange) }
+            }
+        };
+        return Msg.Flex($"ยอดค้างของ {name}", bubble);
+    }
+
     // ───────── confirm card (before a bill is created) ─────────
 
     public record ConfirmInfo(string Title, IReadOnlyList<string> Calc, IReadOnlyList<string> Info, IReadOnlyList<string> Warnings);
@@ -283,13 +334,13 @@ public static class Cards
     }
 
     /// <summary>The button that opens the people-picker page.</summary>
-    public static object PickPrompt(AppSettings s, string title, string what, string pickUrl)
+    public static object PickPrompt(AppSettings s, string title, string what, string pickUrl, string? forName = null, bool allowCancel = true)
     {
         var bubble = new
         {
             type = "bubble",
             size = "kilo",
-            header = new { type = "box", layout = "vertical", paddingAll = "0px", contents = new object[] { Header(LogoUrl(s), "PayYet", "เลือกคนที่จะเรียกเก็บ", Theme.Orange) } },
+            header = new { type = "box", layout = "vertical", paddingAll = "0px", contents = new object[] { Header(LogoUrl(s), forName == null ? "PayYet" : $"คำสั่งของ {forName}", "เลือกคนที่จะเรียกเก็บ", Theme.Orange) } },
             body = new
             {
                 type = "box", layout = "vertical", paddingAll = "16px", spacing = "sm",
@@ -302,11 +353,13 @@ public static class Cards
             footer = new
             {
                 type = "box", layout = "vertical", paddingAll = "12px", spacing = "sm", backgroundColor = Theme.Cream,
-                contents = new object[]
-                {
-                    Button("เลือกคน", new { type = "uri", label = "เลือกคน", uri = pickUrl }, "primary", Theme.Orange),
-                    Button("ยกเลิก", new { type = "postback", label = "ยกเลิก", data = "act=cancel" }, "link", Theme.Grey)
-                }
+                contents = allowCancel
+                    ? new object[]
+                    {
+                        Button("เลือกคน", new { type = "uri", label = "เลือกคน", uri = pickUrl }, "primary", Theme.Orange),
+                        Button("ยกเลิก", new { type = "postback", label = "ยกเลิก", data = "act=cancel" }, "link", Theme.Grey)
+                    }
+                    : new object[] { Button("เลือกคน", new { type = "uri", label = "เลือกคน", uri = pickUrl }, "primary", Theme.Orange) }
             }
         };
         return Msg.Flex("เลือกคนที่จะเรียกเก็บ: " + title, bubble);

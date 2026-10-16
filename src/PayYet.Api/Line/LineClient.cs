@@ -17,6 +17,19 @@ public class LineClient(HttpClient http, IOptions<AppSettings> options, ILogger<
     private static readonly JsonSerializerOptions Json = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull };
     private LineSection Cfg => options.Value.Line;
 
+    private string? _oaUrl;
+
+    /// <summary>"Add friend" link of the bot: the configured one, else built from the bot's basic id (cached).</summary>
+    public async Task<string?> GetOaUrlAsync()
+    {
+        if (_oaUrl != null) return _oaUrl;
+        if (!string.IsNullOrEmpty(options.Value.App.LineOaUrl)) return _oaUrl = options.Value.App.LineOaUrl;
+        var doc = await GetJsonAsync($"{Api}/info");
+        if (doc != null && doc.RootElement.TryGetProperty("basicId", out var id) && id.GetString() is { Length: > 0 } basic)
+            return _oaUrl = "https://line.me/R/ti/p/" + basic;
+        return null;
+    }
+
     public Task<bool> ReplyAsync(string replyToken, params object[] messages) =>
         PostAsync($"{Api}/message/reply", new { replyToken, messages });
 

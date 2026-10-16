@@ -50,6 +50,7 @@
   .chip { display:inline-flex; align-items:center; gap:6px; height:36px; padding:0 12px 0 8px; border:1px solid var(--line); border-radius:18px; background:transparent; font-size:14px; }
   .chip:active { background:rgba(128,128,128,.16); }
   .chip.warn { color:var(--warn); border-color:var(--warn); }
+  a.chip { text-decoration:none; color:var(--text); }
   .chips { display:flex; gap:8px; flex-wrap:wrap; }
   .cta { display:flex; align-items:center; justify-content:center; gap:6px; width:100%; min-height:44px; border:0; border-radius:22px; background:var(--accent); color:var(--on); font-weight:700; margin-top:10px; }
 
@@ -76,6 +77,7 @@
   .seg button { flex:1; height:34px; border:0; background:transparent; font-size:14px; display:inline-flex; align-items:center; justify-content:center; gap:6px; }
   .seg button.on { background:var(--accent); color:var(--on); font-weight:700; }
   .seg .ic svg { width:16px; height:16px; }
+  .inp.amt { width:92px; height:34px; font-size:15px; text-align:right; padding:0 8px; }
   .cashform { display:flex; gap:6px; align-items:center; margin:2px 0 6px 46px; }
   .cashform .inp { width:120px; height:36px; font-size:15px; }
 
@@ -142,7 +144,9 @@
     user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.5-6.5 8-6.5s8 2.5 8 6.5"/>',
     home: '<path d="M4 11l8-7 8 7v9H4z"/>',
     swap: '<path d="M7 7h12l-3-3M17 17H5l3 3"/>',
-    send: '<path d="M21 3L3 10l7 3 3 7z"/>'
+    send: '<path d="M21 3L3 10l7 3 3 7z"/>',
+    wallet: '<path d="M3 7h16a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><path d="M3 7l12-3v3M16 14h2"/>',
+    help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 114 2c-.9.6-1.5 1.1-1.5 2M12 17h.01"/>'
   };
   function svg(name) { return '<svg viewBox="0 0 24 24" aria-hidden="true">' + ICONS[name] + '</svg>'; }
   function icon(name) { var s = el('span', { class: 'ic' }); s.innerHTML = svg(name); return s; }
@@ -174,7 +178,7 @@
     opts.headers = Object.assign({ Authorization: 'Bearer ' + idToken }, opts.headers || {});
     return fetch(path, opts).then(function (r) {
       return r.json().catch(function () { return {}; }).then(function (j) {
-        if (!r.ok) throw new Error(j.error || ('เกิดข้อผิดพลาด (' + r.status + ')'));
+        if (!r.ok) { var err = new Error(j.error || ('เกิดข้อผิดพลาด (' + r.status + ')')); err.data = j; throw err; }
         return j;
       });
     });
@@ -301,11 +305,13 @@
 
   function pill(text, cls) { return el('span', { class: 'pill ' + cls, text: text }); }
 
-  // Searchable checkbox list of one group's members, with a select-all icon. onChange fires after every selection change.
+  // Searchable checkbox list of one group's members. Each ticked person gets an editable amount box:
+  // untouched boxes follow the default (equal split / full amount), edited ones are kept and the rest re-share what is left.
   function peopleBox(group, onChange) {
     var selected = {};
     var rows = [];
     function ids() { return Object.keys(selected).filter(function (k) { return selected[k]; }).map(Number); }
+    function editedRows() { return rows.filter(function (r) { return selected[r.id] && r.edited; }); }
 
     var search = el('input', { type: 'search', placeholder: 'ค้นหาชื่อ', class: 'inp' });
     search.addEventListener('input', function () {
@@ -316,21 +322,61 @@
     var list = el('div');
     group.members.forEach(function (p) {
       var cb = el('input', { type: 'checkbox' });
-      var row = el('label', { class: 'li' }, [avatar(p.pictureUrl, p.name, false), el('span', { class: 'grow', text: p.name }), cb]);
-      cb.addEventListener('change', function () { selected[p.id] = cb.checked; onChange(); });
-      rows.push({ el: row, name: p.name.toLowerCase(), box: cb, id: p.id });
+      var amt = el('input', { type: 'number', class: 'inp amt', inputmode: 'decimal', step: '0.01', min: '0.01', 'aria-label': 'ยอดของ ' + p.name });
+      amt.style.display = 'none';
+      var row = el('label', { class: 'li' }, [avatar(p.pictureUrl, p.name, false), el('span', { class: 'grow', text: p.name }), amt, cb]);
+      var r = { el: row, name: p.name.toLowerCase(), box: cb, amt: amt, id: p.id, edited: false };
+      cb.addEventListener('change', function () { selected[p.id] = cb.checked; if (!cb.checked) r.edited = false; onChange(); });
+      amt.addEventListener('click', function (e) { e.preventDefault(); });
+      amt.addEventListener('input', function () { r.edited = amt.value !== ''; onChange(); });
+      rows.push(r);
       list.appendChild(row);
     });
     if (!group.members.length) list.appendChild(el('div', { class: 'muted small pad', text: 'บอทยังไม่รู้จักใครในกลุ่มนี้ ให้เพื่อนพิมพ์ข้อความทักทายในกลุ่มก่อน' }));
 
     var all = ibtn('all', 'เลือกทั้งหมด', function () {
       var every = rows.length > 0 && rows.every(function (r) { return selected[r.id]; });
-      rows.forEach(function (r) { selected[r.id] = !every; r.box.checked = !every; });
+      rows.forEach(function (r) { selected[r.id] = !every; r.box.checked = !every; if (every) r.edited = false; });
       onChange();
     });
+    var reset = ibtn('undo', 'ใช้ยอดเฉลี่ยทุกคน', function () { rows.forEach(function (r) { r.edited = false; }); onChange(); });
+    reset.style.display = 'none';
 
-    var root = el('div', { class: 'card' }, [el('div', { class: 'row' }, [el('span', { class: 'muted small', text: 'เลือกคน' }), all]), search, list]);
-    return { root: root, ids: ids };
+    // Fill the amount boxes. totalBaht: the bill amount; perPerson: everyone pays it, otherwise it is shared.
+    function refresh(totalBaht, perPerson) {
+      var sel = rows.filter(function (r) { return selected[r.id]; });
+      var keptSum = 0, free = [];
+      sel.forEach(function (r) { if (r.edited) keptSum += parseFloat(r.amt.value) || 0; else free.push(r); });
+      var each = perPerson ? totalBaht : (free.length ? Math.max(0, (totalBaht - keptSum) / free.length) : 0);
+      free.forEach(function (r) { r.amt.value = each > 0 ? (Math.floor(each * 100 + 1e-6) / 100).toFixed(2) : ''; });
+      rows.forEach(function (r) { r.amt.style.display = selected[r.id] && totalBaht > 0 ? '' : 'none'; });
+      reset.style.display = editedRows().length ? '' : 'none';
+    }
+    function sum() { return rows.reduce(function (t, r) { return t + (selected[r.id] ? (parseFloat(r.amt.value) || 0) : 0); }, 0); }
+    // null while nobody was edited: the server then splits equally by itself (exact to the satang).
+    function amounts() {
+      if (!editedRows().length) return null;
+      var o = {};
+      rows.forEach(function (r) { if (selected[r.id]) o[r.id] = parseFloat(r.amt.value) || 0; });
+      return o;
+    }
+
+    var head = el('div', { class: 'row' }, [el('span', { class: 'muted small grow', text: 'เลือกคน · แตะยอดเพื่อแก้ไขรายคน' }), reset, all]);
+    var root = el('div', { class: 'card' }, [head, search, list]);
+    return { root: root, ids: ids, refresh: refresh, sum: sum, amounts: amounts, edited: function () { return editedRows().length > 0; } };
+  }
+
+  // Summary line under the form, shared by the picker and the new-bill form.
+  function summaryText(box, totalBaht, perPerson) {
+    var n = box.ids().length;
+    if (n === 0) return 'ยังไม่ได้เลือกใคร';
+    if (!(totalBaht > 0)) return 'เลือก ' + n + ' คน · ใส่ยอดเงินด้านบน';
+    var t = 'เลือก ' + n + ' คน · รวม ' + money(box.sum() * 100);
+    if (box.edited()) {
+      t += ' · ปรับยอดรายคน';
+      if (!perPerson && Math.abs(box.sum() - totalBaht) > 0.005) t += ' (ต่างจากยอดที่ตั้ง ' + money(Math.abs(box.sum() - totalBaht) * 100) + ')';
+    } else if (!perPerson) t += ' · หารเท่ากัน';
+    return t;
   }
 
   // Where the bill goes: the group chat, or private messages to each person. Chosen per bill.
@@ -402,26 +448,23 @@
       var dest = destBox(group);
 
       function update() {
-        var n = box.ids().length;
-        if (n === 0) summary.textContent = 'ยังไม่ได้เลือกใคร';
-        else if (d.perPerson) summary.textContent = 'เลือก ' + n + ' คน × ' + money(d.amountSatang) + ' = ' + money(d.amountSatang * n);
-        else summary.textContent = 'เลือก ' + n + ' คน หารคนละประมาณ ' + money(d.amountSatang / n);
+        box.refresh(d.amountSatang / 100, d.perPerson);
+        summary.textContent = summaryText(box, d.amountSatang / 100, d.perPerson);
       }
 
-      var go = el('button', { class: 'cta', type: 'button' }, [icon('check'), el('span', { text: 'ถัดไป' })]);
+      var go = el('button', { class: 'cta', type: 'button' }, [icon('check'), el('span', { text: 'สร้างบิล' })]);
       var goText = go.lastChild;
       go.addEventListener('click', function () {
         out.replaceChildren();
         var picked = box.ids();
         if (picked.length === 0) { out.appendChild(el('div', { class: 'msg err', text: 'กรุณาเลือกอย่างน้อย 1 คน' })); return; }
-        go.disabled = true; goText.textContent = 'กำลังส่ง…';
-        post('api/pay/pick', { userIds: picked, dest: dest.value() })
-          .then(function () {
-            show([el('div', { class: 'msg ok', text: 'ส่งการ์ดยืนยันไปที่แชทแล้ว กลับไปกด "ยืนยัน" ในแชทกับบอท' })]);
-            if (window.liff && liff.isInClient && liff.isInClient()) setTimeout(function () { liff.closeWindow(); }, 1500);
-          })
+        var amts = box.amounts();
+        if (amts && Object.keys(amts).some(function (k) { return !(amts[k] > 0); })) { out.appendChild(el('div', { class: 'msg err', text: 'ยอดของทุกคนต้องมากกว่า 0' })); return; }
+        go.disabled = true; goText.textContent = 'กำลังสร้างบิล…';
+        post('api/pay/pick', { userIds: picked, dest: dest.value(), amounts: amts })
+          .then(renderCreated)
           .catch(function (e) {
-            go.disabled = false; goText.textContent = 'ถัดไป';
+            go.disabled = false; goText.textContent = 'สร้างบิล';
             out.appendChild(el('div', { class: 'msg err', text: e.message }));
           });
       });
@@ -430,7 +473,10 @@
       update();
     }
 
-    if (d.groups.length === 1) choosePeople(d.groups[0], false); else chooseGroup();
+    var preset = d.groupId ? d.groups.filter(function (g) { return g.id === d.groupId; })[0] : null;
+    if (preset) choosePeople(preset, d.groups.length > 1);
+    else if (d.groups.length === 1) choosePeople(d.groups[0], false);
+    else chooseGroup();
   }
 
   // ───────── manage: who has paid, cash, waive, cancel a charge or a whole bill ─────────
@@ -535,7 +581,15 @@
       save.disabled = true;
       post('api/app/promptpay', { id: input.value })
         .then(function () { onSaved(); })
-        .catch(function (e) { save.disabled = false; out.appendChild(el('div', { class: 'msg err', text: e.message })); });
+        .catch(function (e) {
+          save.disabled = false;
+          out.appendChild(el('div', { class: 'msg err', text: e.message }));
+          if (e.data && e.data.needFriend && e.data.oaUrl) {
+            var add = el('a', { class: 'chip', href: e.data.oaUrl, target: '_blank', rel: 'noopener' }, [icon('plus'), el('span', { text: 'เพิ่มเพื่อนบอท' })]);
+            out.appendChild(el('div', { class: 'pad' }, [add]));
+            out.appendChild(el('div', { class: 'muted small', text: 'เพิ่มเพื่อนแล้วกลับมากดบันทึกอีกครั้ง' }));
+          }
+        });
     }, 'ok');
     return el('div', { class: 'card' }, [
       el('strong', { text: required ? 'ตั้งพร้อมเพย์สำหรับรับเงินก่อน' : 'เปลี่ยนเลขพร้อมเพย์' }),
@@ -563,25 +617,63 @@
     nodes.push(el('div', { class: 'li' }, [avatar(d.pictureUrl, d.name, false),
       el('span', { class: 'grow' }, [el('strong', { text: d.name }), el('span', { class: 'muted block', text: 'เก็บเงินในกลุ่ม LINE' })])]));
 
-    if (!d.hasPromptPay) nodes.push(promptPayCard(function () { loadHome(); }, true));
-
     nodes.push(el('div', { class: 'card' }, [
       homeRow('plus', 'เก็บเงินใหม่', 'สร้างบิลในกลุ่ม', true, function () { loadNew(); }),
       homeRow('list', 'จัดการบิล', d.openBills > 0 ? d.openBills + ' บิล · ค้างรับ ' + money(d.receivableSatang) : 'ยังไม่มีบิลที่เปิดอยู่', false, function () { loadManage(); }),
-      homeRow('receipt', 'ที่ฉันต้องจ่าย', d.oweCount > 0 ? d.oweCount + ' รายการ · ' + money(d.oweSatang) : 'ไม่มีรายการค้าง', false, function () { loadOwe(); })
+      homeRow('receipt', 'ที่ฉันต้องจ่าย', d.oweCount > 0 ? d.oweCount + ' รายการ · ' + money(d.oweSatang) : 'ไม่มีรายการค้าง', false, function () { loadOwe(); }),
+      homeRow('wallet', 'พร้อมเพย์', d.hasPromptPay ? 'รับเงินที่ ' + (d.promptPayMasked || '') : 'ยังไม่ได้ตั้ง · แตะเพื่อตั้งค่า', false, function () { loadPromptPay(); }),
+      homeRow('help', 'วิธีใช้', 'คำสั่งและรายละเอียดทั้งหมด', false, function () { renderHelp(); })
     ]));
-
-    if (d.hasPromptPay) {
-      var holder = el('div');
-      var form = null;
-      var change = ibtn('edit', 'เปลี่ยนพร้อมเพย์', function () {
-        if (form) { holder.replaceChildren(); form = null; return; }
-        form = promptPayCard(function () { loadHome(); }, false);
-        holder.appendChild(form);
-      });
-      nodes.push(el('div', { class: 'row' }, [el('span', { class: 'muted small', text: 'พร้อมเพย์รับเงิน ' + (d.promptPayMasked || '') }), change]), holder);
-    }
     show(nodes);
+  }
+
+  // ----- PromptPay management -----
+  function loadPromptPay() { return api(API + 'api/app/home').then(renderPromptPay); }
+
+  function renderPromptPay(d) {
+    bar('พร้อมเพย์', toHome);
+    var nodes = [];
+    if (d.hasPromptPay) {
+      nodes.push(el('div', { class: 'card' }, [el('div', { class: 'li' }, [
+        el('span', { class: 'tint' }, [icon('wallet')]),
+        el('span', { class: 'grow' }, [el('strong', { text: d.promptPayMasked || '' }), el('span', { class: 'muted block', text: 'เลขพร้อมเพย์ที่ใช้รับเงิน' })])
+      ])]));
+    }
+    nodes.push(promptPayCard(function () { loadPromptPay(); }, !d.hasPromptPay));
+    show(nodes);
+  }
+
+  // ----- help -----
+  function renderHelp() {
+    bar('วิธีใช้', toHome);
+    var items = [
+      ['plus', 'เก็บเงินใหม่', 'เลือกกลุ่ม ใส่ชื่อรายการและยอด เลือกคน แล้วกดสร้างบิล บอทจะส่งการ์ดเก็บเงินเข้ากลุ่มหรือส่งส่วนตัว'],
+      ['list', 'จัดการบิล', 'ดูว่าใครจ่ายแล้ว บันทึกรับเงินสด ยกหนี้ ยกเลิกรายการ หรือยกเลิกทั้งบิล'],
+      ['receipt', 'ที่ฉันต้องจ่าย', 'รายการที่คุณค้างจ่าย แตะเพื่อดู QR พร้อมเพย์และแนบสลิปได้เลย'],
+      ['wallet', 'พร้อมเพย์', 'ตั้งหรือเปลี่ยนเบอร์/เลขบัตรที่ใช้รับเงิน ต้องตั้งก่อนสร้างบิลแรก']
+    ];
+    var cmds = [
+      ['เก็บ ค่าข้าว 200 ทุกคน', 'เก็บคนละ 200 บาท'],
+      ['หาร ค่าเครื่องดื่ม 300', 'หารยอดรวมตามคนที่เลือก'],
+      ['เก็บ ค่าข้าว สมชาย 100 มาลี 150', 'ระบุยอดรายคน'],
+      ['ยอด', 'ดูยอดค้างของฉัน (พิมพ์ในกลุ่มได้ เห็นเฉพาะของตัวเอง)'],
+      ['เก็บ ค่าข้าว 200 @สมชาย @มาลี', 'ในกลุ่ม: แท็กชื่อคนที่จะเก็บ สร้างบิลทันที ไม่ต้องเลือกซ้ำ'],
+      ['หาร ค่าข้าว 300 ยกเว้น @ต้น', 'ในกลุ่ม: เก็บทุกคนยกเว้นคนที่แท็ก'],
+      ['เก็บ / หาร ... (พิมพ์ในกลุ่มได้)', 'ต้องตั้งพร้อมเพย์ก่อน แล้วเลือกคนและยืนยันในแชทส่วนตัวกับบอท'],
+      ['จัดการ', 'เปิดหน้าจัดการบิล'],
+      ['พร้อมเพย์', 'ตั้งเลขพร้อมเพย์']
+    ];
+    show([
+      el('div', { class: 'card' }, items.map(function (i) {
+        return el('div', { class: 'li' }, [el('span', { class: 'tint' }, [icon(i[0])]),
+          el('span', { class: 'grow' }, [el('strong', { text: i[1] }), el('span', { class: 'muted block', text: i[2] })])]);
+      })),
+      el('div', { class: 'card' }, [el('div', { class: 'muted small', text: 'คำสั่งลัดที่พิมพ์ในแชทกับบอท' })].concat(cmds.map(function (c) {
+        return el('div', { class: 'li' }, [el('span', { class: 'grow' }, [el('strong', { text: c[0] }), el('span', { class: 'muted block', text: c[1] })])]);
+      }))),
+      el('div', { class: 'card' }, [el('div', { class: 'muted small', text: 'การแจ้งเตือน' }),
+        el('div', { class: 'pad', text: 'บอทเตือนคนที่ยังไม่จ่ายวันละครั้งเวลา 10:00 บิลกลุ่มเตือนในกลุ่ม บิลส่วนตัวเตือนในแชทส่วนตัว บิลที่เพิ่มทีหลังจะรวมเป็นบิลเดียวกัน' })])
+    ]);
   }
 
   // ----- new bill form -----
@@ -624,12 +716,9 @@
       amount.addEventListener('input', update);
 
       function update() {
-        var n = box.ids().length;
         var v = parseFloat(amount.value) || 0;
-        if (n === 0) summary.textContent = 'ยังไม่ได้เลือกใคร';
-        else if (v <= 0) summary.textContent = 'เลือก ' + n + ' คน · ใส่ยอดเงินด้านบน';
-        else if (perPerson) summary.textContent = 'เลือก ' + n + ' คน × ' + money(v * 100) + ' = ' + money(v * 100 * n);
-        else summary.textContent = 'เลือก ' + n + ' คน หารคนละประมาณ ' + money(v * 100 / n);
+        box.refresh(v, perPerson);
+        summary.textContent = summaryText(box, v, perPerson);
       }
 
       var go = el('button', { class: 'cta', type: 'button' }, [icon('check'), el('span', { text: 'สร้างบิล' })]);
@@ -640,8 +729,10 @@
         var v = parseFloat(amount.value);
         if (!(v > 0)) { out.appendChild(el('div', { class: 'msg err', text: 'กรุณาใส่ยอดเงิน' })); return; }
         if (picked.length === 0) { out.appendChild(el('div', { class: 'msg err', text: 'กรุณาเลือกอย่างน้อย 1 คน' })); return; }
+        var amts = box.amounts();
+        if (amts && Object.keys(amts).some(function (k) { return !(amts[k] > 0); })) { out.appendChild(el('div', { class: 'msg err', text: 'ยอดของทุกคนต้องมากกว่า 0' })); return; }
         go.disabled = true; goText.textContent = 'กำลังสร้างบิล…';
-        post('api/app/create', { title: title.value, amount: v, perPerson: perPerson, userIds: picked, dest: dest.value() })
+        post('api/app/create', { title: title.value, amount: v, perPerson: perPerson, userIds: picked, dest: dest.value(), amounts: amts })
           .then(renderCreated)
           .catch(function (e) {
             go.disabled = false; goText.textContent = 'สร้างบิล';
@@ -709,7 +800,7 @@
     var st = q.get('liff.state') ? new URLSearchParams(q.get('liff.state').replace(/^\?/, '')) : null;
     billToken = q.get('b') || (st && st.get('b'));
     var mode = q.get('mode') || (st && st.get('mode'));
-    if (!billToken && ['pick', 'manage', 'new', 'owe', 'home'].indexOf(mode) < 0) mode = 'home';
+    if (!billToken && ['pick', 'manage', 'new', 'owe', 'home', 'promptpay', 'help'].indexOf(mode) < 0) mode = 'home';
     idToken = liff.getIDToken();
     if (!idToken) { fail('ไม่พบข้อมูลผู้ใช้ ลองเปิดจากแอป LINE อีกครั้ง'); return; }
     if (mode === 'pick') return loadPick();
@@ -717,6 +808,8 @@
     if (mode === 'new') return loadNew();
     if (mode === 'owe') return loadOwe();
     if (mode === 'home') return loadHome();
+    if (mode === 'promptpay') return loadPromptPay();
+    if (mode === 'help') return renderHelp();
     return load();
   }).catch(function (e) { fail(e.message || 'โหลดไม่สำเร็จ'); });
 })();

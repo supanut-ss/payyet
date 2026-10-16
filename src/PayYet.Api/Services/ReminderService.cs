@@ -45,7 +45,7 @@ public class ReminderService(AppDbContext db, LineClient line, BillCardBuilder c
                 if (bill.GroupId.HasValue)
                 {
                     if (bill.Group is not { Active: true }) continue;
-                    if (await line.PushAsync(bill.Group.LineGroupId, await cards.BuildAsync(bill, "📌 ยังไม่จ่าย"))) groupMsgs++;
+                    if (await line.PushAsync(bill.Group.LineGroupId, await cards.BuildForGroupAsync(bill, "📌 ยังไม่จ่าย"))) groupMsgs++;
                 }
                 else
                 {

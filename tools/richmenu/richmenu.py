@@ -10,17 +10,18 @@ from PIL import Image, ImageDraw, ImageFont
 
 W, H = 2500, 1686
 FONT = r"C:\Windows\Fonts\tahomabd.ttf"  # supports Thai
-LIFF_URL = "https://liff.line.me/{}".format(os.environ.get("LIFF_ID", "YOUR_LIFF_ID"))
+LIFF_BASE = "https://liff.line.me/{}".format(os.environ.get("LIFF_ID", "YOUR_LIFF_ID"))
+HELP_URL = "https://payyet.drivetodev.online/"   # landing page with every command and feature
 
 # (label, icon, bg color, x, y, w, h, action)
-TOP = 906  # matches the row split in design.webp
+TOP = 923  # matches the row split in design.webp
 BOT = H - TOP
 BUTTONS = [
-    ("เก็บเงิน", "💰", "#06C755", 0, 0, W // 2, TOP, {"type": "message", "label": "เก็บเงิน", "text": "เก็บเงิน"}),
-    ("ยอดค้าง", "📋", "#1E88E5", W // 2, 0, W // 2, TOP, {"type": "message", "label": "ยอดค้าง", "text": "ยอดค้าง"}),
-    ("เปิดแอป", "📱", "#8E24AA", 0, TOP, 833, BOT, {"type": "uri", "label": "เปิดแอป", "uri": LIFF_URL}),
-    ("พร้อมเพย์", "🏦", "#F57C00", 833, TOP, 834, BOT, {"type": "message", "label": "พร้อมเพย์", "text": "พร้อมเพย์"}),
-    ("วิธีใช้", "❓", "#546E7A", 1667, TOP, 833, BOT, {"type": "message", "label": "วิธีใช้", "text": "วิธีใช้"}),
+    ("เก็บเงิน", "💰", "#06C755", 0, 0, W // 2, TOP, {"type": "uri", "label": "เก็บเงิน", "uri": LIFF_BASE + "?mode=new"}),
+    ("ยอดค้าง", "📋", "#1E88E5", W // 2, 0, W // 2, TOP, {"type": "uri", "label": "ยอดค้าง", "uri": LIFF_BASE + "?mode=owe"}),
+    ("เปิดแอป", "📱", "#8E24AA", 0, TOP, 833, BOT, {"type": "uri", "label": "เปิดแอป", "uri": LIFF_BASE + "?mode=home"}),
+    ("พร้อมเพย์", "🏦", "#F57C00", 833, TOP, 834, BOT, {"type": "uri", "label": "พร้อมเพย์", "uri": LIFF_BASE + "?mode=promptpay"}),
+    ("วิธีใช้", "❓", "#546E7A", 1667, TOP, 833, BOT, {"type": "uri", "label": "วิธีใช้", "uri": HELP_URL}),
 ]
 
 
