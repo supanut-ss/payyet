@@ -29,6 +29,8 @@ builder.Services.AddDbContext<AppDbContext>(o => o
 builder.Services.AddHttpClient<LineClient>(c => c.Timeout = TimeSpan.FromSeconds(15));
 builder.Services.AddScoped<MemberService>();
 builder.Services.AddScoped<BillService>();
+builder.Services.AddScoped<BillManageService>();
+builder.Services.AddScoped<BillCreationService>();
 builder.Services.AddScoped<DraftService>();
 builder.Services.AddScoped<PaymentService>();
 builder.Services.AddScoped<BillCardBuilder>();

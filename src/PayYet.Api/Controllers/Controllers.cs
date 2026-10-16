@@ -218,3 +218,142 @@ public class PayController(AppDbContext db, LineClient line, PaymentService paym
         return await line.VerifyIdTokenAsync(header["Bearer ".Length..].Trim());
     }
 }
+
+/// <summary>Collector-only endpoints behind the "manage bills" LIFF page. Identity always comes from a verified LINE ID token.</summary>
+[ApiController]
+[Route("api/manage")]
+public class ManageController(AppDbContext db, LineClient line, BillManageService manage, BillCardBuilder cards) : ControllerBase
+{
+    public record PaidRequest(long ItemId, decimal? Amount);
+    public record IdRequest(long Id);
+
+    [HttpGet]
+    public async Task<IActionResult> List()
+    {
+        var user = await AuthUser();
+        if (user == null) return Unauthorized(new { error = "เข้าสู่ระบบไม่สำเร็จ ลองเปิดจากแอป LINE อีกครั้ง" });
+
+        var bills = await manage.OpenBillsAsync(user.Id);
+        return Ok(bills.Select(b => new
+        {
+            id = b.Id,
+            groupName = b.Group?.Name,
+            title = b.Charges.OrderBy(c => c.Id).Select(c => c.Title).FirstOrDefault() ?? b.Title,
+            createdAt = b.CreatedAt,
+            totalSatang = b.Items.Sum(i => i.AmountSatang),
+            paidSatang = b.Items.Sum(i => i.PaidSatang),
+            charges = b.Charges.OrderBy(c => c.Id).Select(c => new { id = c.Id, title = c.Title, totalSatang = c.TotalSatang }),
+            items = b.Items.OrderBy(i => i.Id).Select(i => new
+            {
+                id = i.Id,
+                name = i.Debtor?.Name ?? "?",
+                pictureUrl = string.IsNullOrEmpty(i.Debtor?.PictureUrl) ? null : i.Debtor!.PictureUrl,
+                amountSatang = i.AmountSatang,
+                paidSatang = i.PaidSatang,
+                remainingSatang = i.Remaining,
+                status = i.Status.ToString()
+            })
+        }));
+    }
+
+    [HttpPost("paid")]
+    public async Task<IActionResult> Paid([FromBody] PaidRequest req)
+    {
+        var user = await AuthUser();
+        if (user == null) return Unauthorized(new { error = "เข้าสู่ระบบไม่สำเร็จ ลองเปิดจากแอป LINE อีกครั้ง" });
+
+        var r = await manage.MarkPaidAsync(req.ItemId, user.Id, req.Amount.HasValue ? Money.ToSatang(req.Amount.Value) : null);
+        if (!r.Ok) return BadRequest(new { error = r.Message });
+
+        var item = r.Item!;
+        var name = item.Debtor?.Name ?? "?";
+        var done = r.Bill!.Status == BillStatus.CLOSED;
+        var text = item.Remaining == 0
+            ? $"✅ {name} จ่ายแล้ว (รับเงินกับผู้เก็บโดยตรง) · บิลของ {user.Name}"
+            : $"💵 {name} จ่ายบางส่วนแล้ว คงเหลือ ฿{Money.Format(item.Remaining)} · บิลของ {user.Name}";
+        if (done) text += "\n🎉 ทุกคนจ่ายครบแล้ว บิลปิดเรียบร้อย";
+        await Announce(r.Bill, text, item);
+        return Ok(new { message = r.Message });
+    }
+
+    [HttpPost("waive")]
+    public async Task<IActionResult> Waive([FromBody] IdRequest req)
+    {
+        var user = await AuthUser();
+        if (user == null) return Unauthorized(new { error = "เข้าสู่ระบบไม่สำเร็จ ลองเปิดจากแอป LINE อีกครั้ง" });
+
+        var r = await manage.WaiveAsync(req.Id, user.Id);
+        if (!r.Ok) return BadRequest(new { error = r.Message });
+
+        var text = $"ผู้เก็บ ({user.Name}) ยกหนี้ให้ {r.Item!.Debtor?.Name} แล้ว";
+        if (r.Bill!.Status == BillStatus.CLOSED) text += "\n🎉 บิลปิดเรียบร้อย";
+        await Announce(r.Bill, text, r.Item);
+        return Ok(new { message = r.Message });
+    }
+
+    [HttpPost("cancel-charge")]
+    public async Task<IActionResult> CancelCharge([FromBody] IdRequest req)
+    {
+        var user = await AuthUser();
+        if (user == null) return Unauthorized(new { error = "เข้าสู่ระบบไม่สำเร็จ ลองเปิดจากแอป LINE อีกครั้ง" });
+
+        var r = await manage.CancelChargeAsync(req.Id, user.Id);
+        if (!r.Ok) return BadRequest(new { error = r.Message });
+
+        var bill = r.Bill!;
+        if (bill.Status != BillStatus.OPEN) await Announce(bill, $"🚫 {user.Name} ยกเลิกบิลแล้ว", null, everyone: true);
+        else if (bill.GroupId.HasValue)
+        {
+            var group = await db.Groups.FindAsync(bill.GroupId.Value);
+            if (group is { Active: true }) await line.PushAsync(group.LineGroupId, await cards.BuildAsync(bill, "↩️ ยกเลิกรายการ"));
+        }
+        else
+        {
+            foreach (var debtor in await FriendsOf(bill))
+                await line.PushAsync(debtor.LineUserId, await cards.BuildAsync(bill, "↩️ ยกเลิกรายการ", debtor.Id));
+        }
+        return Ok(new { message = r.Message });
+    }
+
+    [HttpPost("cancel-bill")]
+    public async Task<IActionResult> CancelBill([FromBody] IdRequest req)
+    {
+        var user = await AuthUser();
+        if (user == null) return Unauthorized(new { error = "เข้าสู่ระบบไม่สำเร็จ ลองเปิดจากแอป LINE อีกครั้ง" });
+
+        var r = await manage.CancelBillAsync(req.Id, user.Id);
+        if (!r.Ok) return BadRequest(new { error = r.Message });
+
+        await Announce(r.Bill!, $"🚫 {user.Name} ยกเลิกบิล \"{r.Bill!.Title}\" แล้ว ไม่ต้องจ่ายบิลนี้", null, everyone: true);
+        return Ok(new { message = r.Message });
+    }
+
+    // ---- helpers ----
+
+    /// <summary>Group bills: one message in the group. Private bills: the affected debtor (or every debtor) if they are friends of the bot.</summary>
+    private async Task Announce(Bill bill, string text, BillItem? item, bool everyone = false)
+    {
+        if (bill.GroupId.HasValue)
+        {
+            var group = await db.Groups.FindAsync(bill.GroupId.Value);
+            if (group is { Active: true }) await line.PushAsync(group.LineGroupId, Msg.Text(text));
+            return;
+        }
+
+        var targets = everyone ? await FriendsOf(bill)
+            : item?.Debtor is { IsFriend: true } d ? new List<AppUser> { d } : new List<AppUser>();
+        foreach (var debtor in targets) await line.PushAsync(debtor.LineUserId, Msg.Text(text));
+    }
+
+    private Task<List<AppUser>> FriendsOf(Bill bill) => db.BillItems
+        .Where(i => i.BillId == bill.Id && i.Debtor != null && i.Debtor.IsFriend)
+        .Select(i => i.Debtor!).Distinct().ToListAsync();
+
+    private async Task<AppUser?> AuthUser()
+    {
+        var header = Request.Headers.Authorization.FirstOrDefault();
+        if (header == null || !header.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)) return null;
+        var who = await line.VerifyIdTokenAsync(header["Bearer ".Length..].Trim());
+        return who == null ? null : await db.Users.FirstOrDefaultAsync(u => u.LineUserId == who.Value.UserId);
+    }
+}

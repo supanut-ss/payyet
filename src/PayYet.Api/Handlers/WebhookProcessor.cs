@@ -13,15 +13,15 @@ namespace PayYet.Handlers;
 
 /// <summary>Routes LINE webhook events: lifecycle, group chatter, private-chat commands and postbacks.</summary>
 public class WebhookProcessor(
-    AppDbContext db, LineClient line, MemberService members, BillService bills, DraftService drafts,
-    PaymentService payments, BillCardBuilder cards, DraftCardBuilder draftCards, IOptions<AppSettings> options,
+    AppDbContext db, LineClient line, MemberService members, DraftService drafts,
+    PaymentService payments, DraftCardBuilder draftCards, BillCreationService creation, IOptions<AppSettings> options,
     ILogger<WebhookProcessor> log)
 {
     private const string Welcome =
         "สวัสดีครับ 👋 ผมช่วยเก็บเงินในกลุ่มหรือรายคน\n" +
         "1) ตั้งเลขพร้อมเพย์รับเงิน: พร้อมเพย์ 0812345678\n" +
         "2) สั่งเก็บเงินที่นี่ (แชทส่วนตัว) เช่น หาร ค่าข้าว 500 หรือ เก็บ ค่าอาหาร 200\n" +
-        "3) เช็คยอด: พิมพ์ ยอด\n\n" + DraftService.HelpText;
+        "3) เช็คยอด: พิมพ์ ยอด  |  จัดการบิล (รับเงินสด ยกหนี้ ยกเลิก): พิมพ์ จัดการ\n\n" + DraftService.HelpText;
 
     public async Task HandleAsync(JsonElement ev)
     {
@@ -156,6 +156,21 @@ public class WebhookProcessor(
         if (text is "ยอด" or "ยอดค้าง")
         {
             await line.ReplyAsync(replyToken, Msg.Text(await PrivateStatusAsync(user)));
+            return;
+        }
+
+        if (text is "จัดการ" or "จัดการบิล" or "บิลของฉัน")
+        {
+            var open = await db.Bills.Where(b => b.CreatorId == user.Id && b.Status == BillStatus.OPEN).Select(b => b.Id).ToListAsync();
+            if (open.Count == 0)
+            {
+                await line.ReplyAsync(replyToken, Msg.Text("ตอนนี้ไม่มีบิลที่ยังเปิดอยู่ สั่งเก็บเงินใหม่ได้เลย เช่น หาร ค่าข้าว 500"));
+                return;
+            }
+            var items = await db.BillItems.Where(i => open.Contains(i.BillId)).ToListAsync();
+            var unpaid = items.Where(i => !i.IsSettled).Sum(i => i.Remaining);
+            await line.ReplyAsync(replyToken, Cards.ManagePrompt(options.Value, open.Count, unpaid,
+                $"https://liff.line.me/{options.Value.Liff.Id}?mode=manage"));
             return;
         }
 
@@ -319,61 +334,15 @@ public class WebhookProcessor(
         var d = JsonSerializer.Deserialize<Draft>(st.Data)!;
         await ClearStateAsync(user.Id);   // clear first so a double tap cannot create the charge twice
 
-        var undo = new List<(string, string)>();
-        string summary;
-
-        if (d.Dest == "G")
-        {
-            var group = await db.Groups.FindAsync(d.GroupId);
-            var r = await bills.AddChargeAsync(user.Id, d.GroupId, null, d.Title, d.Mode, d.ComputeShares());
-            var pushed = group != null && await line.PushAsync(group.LineGroupId,
-                await cards.BuildAsync(r.Bill, r.Merged ? "➕ เพิ่มรายการ" : "💰 เรียกเก็บเงิน"));
-            undo.Add(("ยกเลิกรายการนี้", $"act=undo&c={r.Charge.Id}"));
-            summary = pushed
-                ? $"✅ ส่งการ์ดเก็บเงินเข้ากลุ่ม {d.GroupName} แล้ว"
-                : "⚠️ สร้างบิลแล้ว แต่ส่งเข้ากลุ่มไม่สำเร็จ (บอทยังอยู่ในกลุ่มหรือไม่?)";
-        }
-        else
-        {
-            var unreachable = new List<string>();
-            foreach (var share in d.ComputeShares())
-            {
-                var debtor = await db.Users.FindAsync(share.UserId);
-                var r = await bills.AddChargeAsync(user.Id, null, share.UserId, d.Title, d.Mode, new[] { share });
-                if (debtor is { IsFriend: true })
-                    await line.PushAsync(debtor.LineUserId, await cards.BuildAsync(r.Bill, r.Merged ? "➕ เพิ่มรายการ" : "💰 เรียกเก็บเงิน", debtor.Id));
-                else
-                    unreachable.Add(debtor?.Name ?? "?");
-                if (undo.Count < 3) undo.Add(($"ยกเลิก {debtor?.Name}", $"act=undo&c={r.Charge.Id}"));
-            }
-            summary = "✅ สร้างบิลส่วนตัวแล้ว";
-            if (unreachable.Count > 0)
-                summary += $"\n⚠️ ส่งแจ้งไม่ได้ (ยังไม่ได้เพิ่มบอทเป็นเพื่อน): {string.Join(", ", unreachable)}\nให้เขาเพิ่มบอทเป็นเพื่อน แล้วจะได้รับการเตือนรายวัน";
-        }
-
-        user.LastGroupId = d.GroupId ?? user.LastGroupId;
-        await db.SaveChangesAsync();
-
-        await line.ReplyAsync(replyToken, Cards.Created(options.Value, "สร้างบิลแล้ว", summary, undo));
+        var created = await creation.CreateAsync(user, d);
+        await line.ReplyAsync(replyToken, Cards.Created(options.Value, "สร้างบิลแล้ว", created.Summary,
+            created.Undo.Select(u => (u.Label, $"act=undo&c={u.ChargeId}"))));
     }
 
     private async Task UndoAsync(AppUser user, string replyToken, long chargeId)
     {
-        var (ok, message, bill) = await bills.UndoChargeAsync(chargeId, user.Id);
+        var (ok, message) = await creation.UndoAsync(user, chargeId);
         await line.ReplyAsync(replyToken, Msg.Text(ok ? "↩️ " + message : "⚠️ " + message));
-        if (!ok || bill == null) return;
-
-        if (bill.GroupId.HasValue)
-        {
-            var group = await db.Groups.FindAsync(bill.GroupId.Value);
-            if (group is { Active: true })
-            {
-                if (bill.Status == BillStatus.OPEN)
-                    await line.PushAsync(group.LineGroupId, await cards.BuildAsync(bill, "↩️ ยกเลิกรายการล่าสุด"));
-                else
-                    await line.PushAsync(group.LineGroupId, Msg.Text($"↩️ {user.Name} ยกเลิกบิลแล้ว"));
-            }
-        }
     }
 
     // ───────────────────────── helpers ─────────────────────────

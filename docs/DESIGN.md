@@ -124,6 +124,22 @@ Payment happens on a **LIFF page**, not in the chat, so the group stays clean (n
 
 Server-side checks on `POST /api/pay/slip`: the verified user must be the `debtor_id` of that bill item; item must be `PENDING`/`REJECTED`/partially paid; file ≤ 5 MB, JPEG/PNG by magic bytes (not by extension); SHA-256 stored in `payments.slip_hash` (unique) to block re-submitting the same image; rate limit per user.
 
+### 4.4.0 App screens (LIFF)
+One LIFF page, several screens selected by `?mode=`: `home` (hub: new bill, manage, what I owe, PromptPay setting), `new` (form), `manage` (§4.4.1), `owe`, plus `pick` (the people picker used by the typed commands). No parameters = `home`.
+- **New bill form** — `GET /api/app/new` (groups, members, pictures, whether PromptPay is set) → choose the group → title, amount, "หารยอดรวม" (split a total) or "เก็บคนละ" (each pays), people, destination → `POST /api/app/create`. The server re-validates everyone picked, then `BillCreationService` creates and announces the bill exactly like the chat confirm button; the response carries undo handles (`POST /api/app/undo`, 10 minutes).
+- **PromptPay** — `POST /api/app/promptpay` (collectors must set it before the first bill; the number is shown masked).
+- **What I owe** — `GET /api/app/owe` lists open items for the signed-in user with the token that opens the pay page.
+- Anyone who opens the app before ever messaging the bot is created from the LINE profile in the ID token.
+Rich-menu buttons can point straight at `https://liff.line.me/<liffId>?mode=home|new|manage|owe`.
+
+### 4.4.1 Managing a bill afterwards
+`จัดการ` (private chat) opens the LIFF page `?mode=manage`: the collector's open bills with every charge and person, their state and what is still owed.
+- **Cash received** — `POST /api/manage/paid {itemId, amount?}` adds an `APPROVED` payment (`verified_by = CASH`, no slip) and updates `paid_satang`; partial amounts are allowed. Refused while a slip is `SUBMITTED` for that person.
+- **Waive** — the person's remaining debt is forgiven (`WAIVED`); the paid part stays.
+- **Cancel one charge** — no time limit (the chat undo is 10 minutes): amounts shrink by each share; refused if someone has a slip waiting or paid more than the new amount. People who already paid enough become `PAID`. Cancelling the last charge cancels the bill.
+- **Cancel the whole bill** — status `CANCELLED`, scope freed; money already received is not refunded by the bot.
+Every action re-checks that the caller created the bill. Group bills announce the change in the group, private bills notify the affected debtors who are bot friends.
+
 ### 4.5 Reminders
 - **Once a day at 10:00 (Asia/Bangkok)**, for every OPEN bill that still has unpaid items, starting the day after the bill was created.
 - Plesk Scheduled Task calls `POST /jobs/reminders` (`X-Job-Key` header) **hourly**. The job does nothing before 10:00 Bangkok. After that, for each OPEN bill it atomically claims the day:

@@ -9,7 +9,7 @@ using PayYet.Line;
 namespace PayYet.Services;
 
 public class PaymentService(AppDbContext db, LineClient line, BillService bills, IOptions<AppSettings> options,
-    IWebHostEnvironment env, ILogger<PaymentService> log)
+    IWebHostEnvironment env)
 {
     public const long MaxSlipBytes = 5 * 1024 * 1024;
 

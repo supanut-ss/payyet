@@ -5,84 +5,94 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#1b1f24" media="(prefers-color-scheme: dark)">
-<title>จ่ายเงิน — PayYet</title>
+<title>PayYet</title>
 <link rel="icon" type="image/png" href="../img/favicon-48.png">
 <link rel="apple-touch-icon" href="../img/apple-touch-icon.png">
 <style>
-  :root { --bg:#f6f7f9; --card:#fff; --text:#1c1e21; --muted:#6b7280; --line:#e5e7eb; --accent:#06c755; --warn:#d9480f; --ok:#1a9c4a; }
+  :root { --bg:#f6f7f9; --card:#fff; --text:#1c1e21; --muted:#6b7280; --line:#e8eaed; --accent:#ff8a00; --on:#2b1400; --warn:#d9480f; --ok:#1a9c4a; }
   @media (prefers-color-scheme: dark) {
     :root { --bg:#111418; --card:#1b1f24; --text:#e8eaed; --muted:#9aa3ad; --line:#2d333b; }
   }
-  * { box-sizing: border-box; }
-  body { margin:0; background:var(--bg); color:var(--text); font:16px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans Thai",sans-serif; }
-  main { max-width:480px; margin:0 auto; padding:0 16px 16px; }
-  .brand { max-width:480px; margin:0 auto; padding:14px 16px 8px; display:flex; align-items:center; gap:10px; }
-  .brand img { width:44px; height:44px; border-radius:12px; }
-  .brand span { font-weight:800; font-size:18px; letter-spacing:-.01em; }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px; margin-bottom:12px; }
-  h1 { font-size:18px; margin:0 0 2px; }
-  .muted { color:var(--muted); font-size:14px; }
-  .amount { font-size:32px; font-weight:700; margin:4px 0; }
-  .row { display:flex; justify-content:space-between; gap:12px; padding:4px 0; font-size:15px; }
-  .qr { display:block; width:240px; max-width:100%; margin:8px auto; border-radius:8px; background:#fff; }
-  label { display:block; font-size:14px; color:var(--muted); margin:12px 0 4px; }
-  input[type=number] { width:100%; padding:10px 12px; font-size:18px; border:1px solid var(--line); border-radius:10px; background:var(--bg); color:var(--text); }
-  button { width:100%; padding:12px; font-size:17px; font-weight:600; border:0; border-radius:12px; background:var(--accent); color:#fff; margin-top:12px; }
-  button.secondary { background:transparent; color:var(--text); border:1px solid var(--line); margin-top:8px; font-weight:500; }
+  * { box-sizing:border-box; }
+  html { -webkit-text-size-adjust:100%; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans Thai",sans-serif;
+         -webkit-tap-highlight-color:transparent; padding:0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+  button { font:inherit; color:inherit; cursor:pointer; touch-action:manipulation; }
   button:disabled { opacity:.5; }
-  .msg { padding:10px 12px; border-radius:10px; margin-top:12px; font-size:15px; }
-  .msg.ok { background:rgba(26,156,74,.12); color:var(--ok); }
-  .msg.err { background:rgba(217,72,15,.12); color:var(--warn); }
-  .status-PAID, .ok { color:var(--ok); } .status-REJECTED { color:var(--warn); }
-  a, .link { color:var(--accent); }
-  .pick-amount { font-size:24px; line-height:1.3; }
-  .pick-row { display:flex; align-items:center; gap:12px; width:100%; padding:8px 0; background:none; border:0; border-radius:0; color:var(--text); font:inherit; font-weight:400; text-align:left; margin:0; cursor:pointer; }
-  .pick-row.static { cursor:default; }
-  .pick-row + .pick-row { border-top:1px solid var(--line); }
-  .group-row { padding:10px 0; }
-  .pick-row input[type=checkbox] { width:22px; height:22px; flex:0 0 auto; }
+
+  /* top bar: back icon + title */
+  .bar { position:sticky; top:0; z-index:10; display:flex; align-items:center; gap:8px; min-height:48px; background:var(--card); border-bottom:1px solid var(--line);
+         padding:calc(6px + env(safe-area-inset-top)) max(12px, calc((100% - 560px) / 2 + 12px)) 6px; }
+  .bar img { width:24px; height:24px; border-radius:7px; }
+  .bar .ttl { flex:1; font-weight:700; font-size:16px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  main { max-width:560px; margin:0 auto; padding:12px 12px 24px; }
+
+  .card { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px; margin-bottom:10px; }
+  h1 { font-size:16px; margin:0; }
+  .muted { color:var(--muted); }
+  .small { font-size:13px; }
+  .amount { font-size:clamp(28px,8vw,36px); font-weight:700; margin:2px 0; }
+  .row { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:3px 0; }
   .grow { flex:1 1 auto; min-width:0; }
   .block { display:block; font-size:13px; }
-  .chev { font-size:26px; color:var(--muted); }
-  .avatar { width:44px; height:44px; flex:0 0 44px; border-radius:50%; overflow:hidden; background:var(--line); display:inline-flex; align-items:center; justify-content:center; }
-  .avatar.sq { border-radius:12px; }
+  .pad { padding:4px 0; }
+  .sub { margin-top:10px; padding-top:8px; border-top:1px solid var(--line); }
+  .preline { white-space:pre-line; }
+  .qr { display:block; width:min(240px,70%); margin:8px auto 2px; border-radius:8px; background:#fff; }
+  .hid { display:none; }
+
+  /* icons */
+  .ic { display:inline-flex; }
+  .ic svg, .ib svg { width:20px; height:20px; fill:none; stroke:currentColor; stroke-width:1.8; stroke-linecap:round; stroke-linejoin:round; }
+  .ib { display:inline-flex; align-items:center; justify-content:center; width:36px; height:36px; padding:0; border:0; border-radius:50%; background:transparent; color:var(--muted); flex:0 0 auto; }
+  .ib:hover, .ib:active { background:rgba(128,128,128,.16); color:var(--text); }
+  .ib.ok { color:var(--ok); } .ib.warn { color:var(--warn); } .ib.on { color:var(--accent); }
+  .chip { display:inline-flex; align-items:center; gap:6px; height:36px; padding:0 12px 0 8px; border:1px solid var(--line); border-radius:18px; background:transparent; font-size:14px; }
+  .chip:active { background:rgba(128,128,128,.16); }
+  .chip.warn { color:var(--warn); border-color:var(--warn); }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; }
+  .cta { display:flex; align-items:center; justify-content:center; gap:6px; width:100%; min-height:44px; border:0; border-radius:22px; background:var(--accent); color:var(--on); font-weight:700; margin-top:10px; }
+
+  /* list rows */
+  .li { display:flex; align-items:center; gap:10px; width:100%; padding:8px 0; background:none; border:0; text-align:left; }
+  .li + .li { border-top:1px solid var(--line); }
+  button.li { cursor:pointer; }
+  .tint { width:36px; height:36px; flex:0 0 36px; border-radius:10px; display:inline-flex; align-items:center; justify-content:center; background:rgba(128,128,128,.14); color:var(--text); }
+  .tint.accent { background:var(--accent); color:var(--on); }
+  .chev { color:var(--muted); display:inline-flex; }
+  .chev svg { width:18px; height:18px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
+  .avatar { width:36px; height:36px; flex:0 0 36px; border-radius:50%; overflow:hidden; background:var(--line); display:inline-flex; align-items:center; justify-content:center; }
+  .avatar.sq { border-radius:10px; }
   .avatar img { width:100%; height:100%; object-fit:cover; display:block; }
-  .avatar.ph { font-weight:700; font-size:18px; color:var(--text); background:#ffe9c7; }
-  @media (prefers-color-scheme: dark) { .avatar.ph { background:#3b2810; } }
+  .avatar.ph { font-weight:700; font-size:15px; background:#ffe9c7; color:#2b1400; }
+  @media (prefers-color-scheme: dark) { .avatar.ph { background:#3b2810; color:var(--text); } }
+  .li input[type=checkbox] { width:20px; height:20px; flex:0 0 auto; accent-color:var(--accent); }
 
-  /* ---------- app-like layout on every screen ---------- */
-  html { -webkit-text-size-adjust:100%; }
-  body { -webkit-tap-highlight-color:transparent; overscroll-behavior-y:none;
-         padding:0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
-  .brand { position:sticky; top:0; z-index:10; max-width:none; margin:0; background:var(--card); border-bottom:1px solid var(--line);
-           padding:calc(10px + env(safe-area-inset-top)) max(16px, calc((100% - 560px) / 2 + 16px)) 10px; }
-  main { max-width:560px; padding:16px; }
-  input[type=number], input[type=file] { font-size:16px; min-height:48px; } /* >=16px stops iOS zoom-on-focus */
-  input[type=file] { width:100%; padding:10px 0; }
-  button { min-height:52px; touch-action:manipulation; cursor:pointer; }
-  button:active { transform:scale(.98); }
-  .amount { font-size:clamp(30px,9vw,40px); }
-  .qr { width:min(280px,80%); }
+  /* forms */
+  label.fld { display:block; font-size:13px; color:var(--muted); margin:10px 0 4px; }
+  .inp { width:100%; height:42px; padding:0 12px; font:inherit; font-size:16px; border:1px solid var(--line); border-radius:10px; background:var(--bg); color:var(--text); }
+  .inp.big { height:50px; font-size:24px; font-weight:700; }
+  .seg { display:flex; border:1px solid var(--line); border-radius:10px; overflow:hidden; margin-top:10px; }
+  .seg button { flex:1; height:34px; border:0; background:transparent; font-size:14px; display:inline-flex; align-items:center; justify-content:center; gap:6px; }
+  .seg button.on { background:var(--accent); color:var(--on); font-weight:700; }
+  .seg .ic svg { width:16px; height:16px; }
+  .cashform { display:flex; gap:6px; align-items:center; margin:2px 0 6px 46px; }
+  .cashform .inp { width:120px; height:36px; font-size:15px; }
 
-  /* tablet / desktop: centred "sheet" so it never stretches edge to edge */
-  @media (min-width:600px) {
-    main { padding:24px 16px 32px; }
-    .card { padding:20px; border-radius:18px; }
-  }
-  @media (min-width:1024px) {
-    body { background:var(--bg); }
-    main { margin-top:8px; }
-  }
-  /* phone: keep the submit button reachable at the bottom of the screen */
-  @media (max-width:599px) {
-    main { padding-bottom:24px; }
-    .card button:not(.secondary) { position:sticky; bottom:calc(12px + env(safe-area-inset-bottom)); box-shadow:0 6px 18px rgba(0,0,0,.18); }
-  }
-  @media (prefers-reduced-motion:reduce) { button:active { transform:none; } }
+  .msg { padding:8px 12px; border-radius:10px; margin-top:10px; font-size:14px; }
+  .msg.ok { background:rgba(26,156,74,.12); color:var(--ok); }
+  .msg.err { background:rgba(217,72,15,.12); color:var(--warn); }
+  .status-PAID { color:var(--ok); } .status-REJECTED { color:var(--warn); }
+  .pill { display:inline-block; padding:2px 9px; border-radius:11px; font-size:12px; font-weight:700; white-space:nowrap; }
+  .pill.ok { background:rgba(26,156,74,.15); color:var(--ok); }
+  .pill.wait { background:rgba(194,94,0,.15); color:#c25e00; }
+  .pill.grey { background:rgba(120,120,120,.18); color:var(--muted); }
+  .pill.due { background:rgba(217,72,15,.13); color:var(--warn); }
+  @media (min-width:600px) { main { padding-top:20px; } .card { padding:16px; } }
 </style>
 </head>
 <body>
-<div class="brand"><img src="../img/logo-256.webp" width="44" height="44" alt=""><span>PayYet</span></div>
+<div class="bar"><span id="backSlot"></span><img src="../img/logo-256.webp" width="24" height="24" alt=""><span class="ttl" id="ttl">PayYet</span></div>
 <main id="app"><div class="card muted">กำลังโหลด…</div></main>
 
 <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
@@ -108,8 +118,56 @@
     var v = satang / 100;
     return v.toLocaleString('th-TH', { minimumFractionDigits: satang % 100 ? 2 : 0, maximumFractionDigits: 2 });
   }
-  function show(nodes) { app.replaceChildren.apply(app, nodes); }
+  function money(satang) { return '฿' + baht(Math.round(satang)); }
+  function show(nodes) { app.replaceChildren.apply(app, nodes); window.scrollTo(0, 0); }
   function fail(text) { show([el('div', { class: 'card' }, [el('div', { class: 'msg err', text: text })])]); }
+
+  // ───────── icons (constant SVG markup only, never user data) ─────────
+  var ICONS = {
+    back: '<path d="M15 18l-6-6 6-6"/>',
+    chev: '<path d="M9 18l6-6-6-6"/>',
+    plus: '<path d="M12 5v14M5 12h14"/>',
+    list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+    receipt: '<path d="M6 3h12v18l-3-2-3 2-3-2-3 2z"/><path d="M9 8h6M9 12h6"/>',
+    cash: '<rect x="3" y="7" width="18" height="10" rx="2"/><circle cx="12" cy="12" r="2.5"/>',
+    ban: '<circle cx="12" cy="12" r="9"/><path d="M5.6 5.6l12.8 12.8"/>',
+    x: '<path d="M6 6l12 12M18 6L6 18"/>',
+    trash: '<path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/>',
+    undo: '<path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 010 12h-3"/>',
+    camera: '<path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/>',
+    edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/>',
+    check: '<path d="M5 12l5 5 9-10"/>',
+    all: '<path d="M3 7l3 3 5-6M3 17l3 3 5-6M14 8h7M14 18h7"/>',
+    users: '<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.5 3-6 6.5-6s6.5 2.5 6.5 6"/><path d="M16 5a3.5 3.5 0 010 7M18 14c2.5.7 3.5 2.7 3.5 6"/>',
+    user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.5-6.5 8-6.5s8 2.5 8 6.5"/>',
+    home: '<path d="M4 11l8-7 8 7v9H4z"/>',
+    swap: '<path d="M7 7h12l-3-3M17 17H5l3 3"/>',
+    send: '<path d="M21 3L3 10l7 3 3 7z"/>'
+  };
+  function svg(name) { return '<svg viewBox="0 0 24 24" aria-hidden="true">' + ICONS[name] + '</svg>'; }
+  function icon(name) { var s = el('span', { class: 'ic' }); s.innerHTML = svg(name); return s; }
+  // Round icon-only button; the label stays available for screen readers and the long-press tooltip.
+  function ibtn(name, label, onClick, cls) {
+    var b = el('button', { class: 'ib' + (cls ? ' ' + cls : ''), type: 'button', 'aria-label': label, title: label });
+    b.innerHTML = svg(name);
+    if (onClick) b.addEventListener('click', onClick);
+    return b;
+  }
+  function chip(name, text, onClick, cls) {
+    var b = el('button', { class: 'chip' + (cls ? ' ' + cls : ''), type: 'button' }, [icon(name), el('span', { text: text })]);
+    b.addEventListener('click', onClick);
+    return b;
+  }
+  function chev() { var s = el('span', { class: 'chev' }); s.innerHTML = svg('chev'); return s; }
+
+  // Top bar: optional back icon on the left, screen title in the middle.
+  function bar(title, onBack) {
+    document.getElementById('ttl').textContent = title || 'PayYet';
+    var slot = document.getElementById('backSlot');
+    slot.replaceChildren();
+    if (onBack) slot.appendChild(ibtn('back', 'กลับ', onBack));
+  }
+  function toHome() { return loadHome(); }
 
   function api(path, opts) {
     opts = opts || {};
@@ -120,6 +178,9 @@
         return j;
       });
     });
+  }
+  function post(path, body) {
+    return api(API + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   }
 
   // Shrink the slip photo on the phone before upload (max 1600 px JPEG).
@@ -134,61 +195,65 @@
     }).catch(function () { return file; });
   }
 
+  // ───────── pay page (opened from a bill card) ─────────
   function render() {
     var d = state, nodes = [];
-    var head = el('div', { class: 'card' }, [
-      el('h1', { text: 'จ่ายเงินให้ ' + d.collector }),
-      el('div', { class: 'muted', text: d.title }),
+    bar('จ่ายเงิน');
+    nodes.push(el('div', { class: 'card' }, [
+      el('div', { class: 'muted small', text: 'จ่ายให้ ' + d.collector + ' · ' + d.title }),
       el('div', { class: 'amount', text: '฿' + baht(d.remainingSatang) }),
-      el('div', { class: 'muted', text: d.paidSatang > 0 ? 'ยอดรวม ฿' + baht(d.amountSatang) + ' · จ่ายแล้ว ฿' + baht(d.paidSatang) : 'ยอดที่ต้องจ่าย' })
-    ]);
-    nodes.push(head);
+      el('div', { class: 'muted small', text: d.paidSatang > 0 ? 'ยอดรวม ฿' + baht(d.amountSatang) + ' · จ่ายแล้ว ฿' + baht(d.paidSatang) : 'ยอดที่ต้องจ่าย' })
+    ]));
 
-    if (d.charges && d.charges.length) {
+    if (d.charges && d.charges.length > 1) {
       nodes.push(el('div', { class: 'card' }, d.charges.map(function (c) {
         return el('div', { class: 'row' }, [el('span', { text: c.title }), el('span', { text: '฿' + baht(c.total) })]);
       })));
     }
 
     if (d.remainingSatang <= 0) {
-      nodes.push(el('div', { class: 'card' }, [el('div', { class: 'msg ok', text: '✅ คุณจ่ายครบแล้ว ขอบคุณครับ' })]));
+      nodes.push(el('div', { class: 'msg ok', text: '✅ คุณจ่ายครบแล้ว ขอบคุณครับ' }));
     } else if (d.billStatus !== 'OPEN') {
-      nodes.push(el('div', { class: 'card' }, [el('div', { class: 'msg err', text: 'บิลนี้ปิดแล้ว' })]));
+      nodes.push(el('div', { class: 'msg err', text: 'บิลนี้ปิดแล้ว' }));
     } else {
       if (d.qr) {
-        var qrCard = el('div', { class: 'card' }, [
-          el('div', { class: 'muted', text: 'สแกนด้วยแอปธนาคาร (กดค้างที่รูปเพื่อบันทึก QR)' }),
+        nodes.push(el('div', { class: 'card' }, [
+          el('div', { class: 'muted small', text: 'สแกนด้วยแอปธนาคาร (กดค้างที่รูปเพื่อบันทึก QR)' }),
           el('img', { class: 'qr', src: d.qr, alt: 'PromptPay QR' })
-        ]);
-        nodes.push(qrCard);
+        ]));
       }
-      if (d.itemStatus === 'SUBMITTED') {
-        nodes.push(el('div', { class: 'card' }, [el('div', { class: 'msg ok', text: '⏳ ส่งสลิปแล้ว รอผู้เก็บตรวจสอบ' })]));
-      } else {
-        nodes.push(uploadCard(d));
-      }
+      if (d.itemStatus === 'SUBMITTED') nodes.push(el('div', { class: 'msg ok', text: '⏳ ส่งสลิปแล้ว รอผู้เก็บตรวจสอบ' }));
+      else nodes.push(uploadCard(d));
     }
 
     if (d.payments && d.payments.length) {
-      nodes.push(el('div', { class: 'card' }, [el('div', { class: 'muted', text: 'ประวัติการส่งสลิป' })].concat(
+      nodes.push(el('div', { class: 'card' }, [el('div', { class: 'muted small', text: 'ประวัติการส่งสลิป' })].concat(
         d.payments.map(function (p) {
           var label = { SUBMITTED: 'รอตรวจ', APPROVED: 'ยืนยันแล้ว', REJECTED: 'ไม่ยืนยัน' }[p.status] || p.status;
-          return el('div', { class: 'row' }, [el('span', { text: '฿' + baht(p.amountSatang) }), el('span', { class: 'status-' + p.status, text: label })]);
+          return el('div', { class: 'row' }, [el('span', { text: '฿' + baht(p.amountSatang) }), el('span', { class: 'small status-' + p.status, text: label })]);
         }))));
     }
     show(nodes);
   }
 
   function uploadCard(d) {
-    var amount = el('input', { type: 'number', inputmode: 'decimal', step: '0.01', min: '0.01', value: (d.remainingSatang / 100).toFixed(2) });
-    var file = el('input', { type: 'file', accept: 'image/*' });
+    var amount = el('input', { type: 'number', class: 'inp', inputmode: 'decimal', step: '0.01', min: '0.01', value: (d.remainingSatang / 100).toFixed(2) });
+    var file = el('input', { type: 'file', accept: 'image/*', class: 'hid' });
+    var pickLabel = el('span', { text: 'แนบสลิป' });
+    var pick = el('button', { class: 'chip', type: 'button' }, [icon('camera'), pickLabel]);
+    pick.addEventListener('click', function () { file.click(); });
+    file.addEventListener('change', function () {
+      pickLabel.textContent = file.files && file.files[0] ? 'เลือกรูปแล้ว' : 'แนบสลิป';
+      pick.classList.toggle('ok', !!(file.files && file.files[0]));
+    });
     var out = el('div');
-    var btn = el('button', { text: 'ส่งสลิป' });
+    var btn = el('button', { class: 'cta', type: 'button' }, [icon('send'), el('span', { text: 'ส่งสลิป' })]);
+    var btnText = btn.lastChild;
     btn.addEventListener('click', function () {
       out.replaceChildren();
       var f = file.files && file.files[0];
       if (!f) { out.appendChild(el('div', { class: 'msg err', text: 'กรุณาแนบรูปสลิปก่อน' })); return; }
-      btn.disabled = true; btn.textContent = 'กำลังส่ง…';
+      btn.disabled = true; btnText.textContent = 'กำลังส่ง…';
       shrink(f).then(function (blob) {
         var fd = new FormData();
         fd.append('billToken', billToken);
@@ -197,14 +262,14 @@
         return api(API + 'api/pay/slip', { method: 'POST', body: fd });
       }).then(function () { return load(); })
         .catch(function (e) {
-          btn.disabled = false; btn.textContent = 'ส่งสลิป';
+          btn.disabled = false; btnText.textContent = 'ส่งสลิป';
           out.appendChild(el('div', { class: 'msg err', text: e.message }));
         });
     });
     return el('div', { class: 'card' }, [
-      el('div', { class: 'muted', text: 'จ่ายเสร็จแล้ว แนบสลิปที่นี่' }),
-      el('label', { text: 'ยอดที่โอน (บาท)' }), amount,
-      el('label', { text: 'รูปสลิป' }), file,
+      el('div', { class: 'muted small', text: 'จ่ายเสร็จแล้ว แนบสลิปที่นี่' }),
+      el('label', { class: 'fld', text: 'ยอดที่โอน (บาท)' }), amount,
+      el('div', { class: 'sub' }, [pick, file]),
       btn, out
     ]);
   }
@@ -216,11 +281,7 @@
     });
   }
 
-  // Collector side: choose the group first, then tick the people in it. Used when the command named nobody.
-  function loadPick() {
-    return api(API + 'api/pay/pick').then(renderPick);
-  }
-
+  // ───────── shared bits for the collector screens ─────────
   // Round profile picture (square for groups); falls back to the first letter when LINE gave none or it fails to load.
   function avatar(url, name, square) {
     var box = el('span', { class: 'avatar' + (square ? ' sq' : '') });
@@ -238,134 +299,406 @@
     return box;
   }
 
-  function renderPick(d) {
-    function money(satang) { return '฿' + baht(Math.round(satang)); }
-    var what = d.perPerson ? 'เก็บคนละ ' + money(d.amountSatang) : 'หาร ' + money(d.amountSatang) + ' ตามจำนวนคนที่เลือก';
-    function head(sub) {
-      return el('div', { class: 'card' }, [
-        el('h1', { text: sub }),
-        el('div', { class: 'muted', text: d.title }),
-        el('div', { class: 'amount pick-amount', text: what })
+  function pill(text, cls) { return el('span', { class: 'pill ' + cls, text: text }); }
+
+  // Searchable checkbox list of one group's members, with a select-all icon. onChange fires after every selection change.
+  function peopleBox(group, onChange) {
+    var selected = {};
+    var rows = [];
+    function ids() { return Object.keys(selected).filter(function (k) { return selected[k]; }).map(Number); }
+
+    var search = el('input', { type: 'search', placeholder: 'ค้นหาชื่อ', class: 'inp' });
+    search.addEventListener('input', function () {
+      var q = search.value.trim().toLowerCase();
+      rows.forEach(function (r) { r.el.style.display = (!q || r.name.indexOf(q) >= 0) ? '' : 'none'; });
+    });
+
+    var list = el('div');
+    group.members.forEach(function (p) {
+      var cb = el('input', { type: 'checkbox' });
+      var row = el('label', { class: 'li' }, [avatar(p.pictureUrl, p.name, false), el('span', { class: 'grow', text: p.name }), cb]);
+      cb.addEventListener('change', function () { selected[p.id] = cb.checked; onChange(); });
+      rows.push({ el: row, name: p.name.toLowerCase(), box: cb, id: p.id });
+      list.appendChild(row);
+    });
+    if (!group.members.length) list.appendChild(el('div', { class: 'muted small pad', text: 'บอทยังไม่รู้จักใครในกลุ่มนี้ ให้เพื่อนพิมพ์ข้อความทักทายในกลุ่มก่อน' }));
+
+    var all = ibtn('all', 'เลือกทั้งหมด', function () {
+      var every = rows.length > 0 && rows.every(function (r) { return selected[r.id]; });
+      rows.forEach(function (r) { selected[r.id] = !every; r.box.checked = !every; });
+      onChange();
+    });
+
+    var root = el('div', { class: 'card' }, [el('div', { class: 'row' }, [el('span', { class: 'muted small', text: 'เลือกคน' }), all]), search, list]);
+    return { root: root, ids: ids };
+  }
+
+  // Where the bill goes: the group chat, or private messages to each person. Chosen per bill.
+  function destBox(group) {
+    var choice = 'G:' + group.id;
+    var hint = el('div', { class: 'muted small pad' });
+    var opts = [
+      { v: 'G:' + group.id, ic: 'users', t: 'ในกลุ่ม', h: 'โพสต์การ์ดในกลุ่ม ' + group.name },
+      { v: 'P', ic: 'user', t: 'ส่วนตัว', h: 'ส่งข้อความหาแต่ละคน (ต้องเป็นเพื่อนกับบอท)' }
+    ];
+    var btns = opts.map(function (o) {
+      var b = el('button', { type: 'button' }, [icon(o.ic), el('span', { text: o.t })]);
+      b.addEventListener('click', function () { choice = o.v; sync(); });
+      return b;
+    });
+    function sync() {
+      opts.forEach(function (o, i) { btns[i].className = o.v === choice ? 'on' : ''; if (o.v === choice) hint.textContent = o.h; });
+    }
+    sync();
+    return { root: el('div', {}, [el('div', { class: 'seg' }, btns), hint]), value: function () { return choice; } };
+  }
+
+  function groupBar(group, onChange) {
+    var bar2 = el('div', { class: 'li' }, [
+      avatar(group.pictureUrl, group.name, true),
+      el('span', { class: 'grow' }, [el('strong', { text: group.name })])
+    ]);
+    if (onChange) bar2.appendChild(ibtn('swap', 'เปลี่ยนกลุ่ม', onChange));
+    return el('div', { class: 'card' }, [bar2]);
+  }
+
+  function groupList(groups, onPick) {
+    return el('div', { class: 'card' }, groups.map(function (g) {
+      var row = el('button', { class: 'li', type: 'button' }, [
+        avatar(g.pictureUrl, g.name, true),
+        el('span', { class: 'grow' }, [el('strong', { text: g.name }), el('span', { class: 'muted block', text: g.members.length + ' คนที่บอทรู้จัก' })]),
+        chev()
       ]);
+      row.addEventListener('click', function () { onPick(g); });
+      return row;
+    }));
+  }
+
+  // ───────── picker opened from the chat command (หาร ... / เก็บ ...) ─────────
+  function loadPick() {
+    return api(API + 'api/pay/pick').then(renderPick);
+  }
+
+  function renderPick(d) {
+    var what = d.perPerson ? 'เก็บคนละ ' + money(d.amountSatang) : 'หาร ' + money(d.amountSatang) + ' ตามจำนวนคนที่เลือก';
+    function head() {
+      return el('div', { class: 'card' }, [el('div', { class: 'muted small', text: d.title }), el('div', { class: 'amount', text: what })]);
     }
 
     if (!d.groups.length) {
-      show([head('เลือกคนที่จะเรียกเก็บ'), el('div', { class: 'card' }, [
-        el('div', { class: 'muted', text: 'ยังไม่มีกลุ่มให้เลือก ชวนบอทเข้ากลุ่ม แล้วให้ทุกคนพิมพ์ข้อความทักทายในกลุ่มก่อน' })
-      ])]);
+      bar('เลือกคน');
+      show([head(), el('div', { class: 'card' }, [
+        el('div', { class: 'muted', text: 'ยังไม่มีกลุ่มให้เลือก ชวนบอทเข้ากลุ่ม แล้วให้ทุกคนพิมพ์ข้อความทักทายในกลุ่มก่อน' })])]);
       return;
     }
 
-    // Step 1: pick the group (skipped when there is only one).
-    function chooseGroup() {
-      var cards = d.groups.map(function (g) {
-        var row = el('button', { class: 'pick-row group-row' }, [
-          avatar(g.pictureUrl, g.name, true),
-          el('span', { class: 'grow' }, [
-            el('strong', { text: g.name }),
-            el('span', { class: 'muted block', text: g.members.length + ' คนที่บอทรู้จัก' })
-          ]),
-          el('span', { class: 'chev', text: '›' })
-        ]);
-        row.addEventListener('click', function () { choosePeople(g, d.groups.length > 1); });
-        return row;
-      });
-      show([head('เลือกกลุ่ม'), el('div', { class: 'card' }, cards)]);
-    }
+    function chooseGroup() { bar('เลือกกลุ่ม'); show([head(), groupList(d.groups, function (g) { choosePeople(g, d.groups.length > 1); })]); }
 
-    // Step 2: tick people inside that group.
     function choosePeople(group, canGoBack) {
-      var selected = {};
-      var rows = [];
-      function ids() { return Object.keys(selected).filter(function (k) { return selected[k]; }).map(Number); }
-
-      var summary = el('div', { class: 'muted' });
+      bar('เลือกคน', canGoBack ? chooseGroup : null);
+      var summary = el('div', { class: 'muted small' });
       var out = el('div');
-      var dest = el('div');
-      var destChoice = 'G:' + group.id;
-
-      var search = el('input', { type: 'search', placeholder: 'ค้นหาชื่อ' });
-      search.style.cssText = 'width:100%;padding:10px 12px;font-size:16px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--text)';
-      search.addEventListener('input', function () {
-        var q = search.value.trim().toLowerCase();
-        rows.forEach(function (r) { r.el.style.display = (!q || r.name.indexOf(q) >= 0) ? '' : 'none'; });
-      });
-
-      var list = el('div');
-      group.members.forEach(function (p) {
-        var cb = el('input', { type: 'checkbox' });
-        var row = el('label', { class: 'pick-row' }, [
-          avatar(p.pictureUrl, p.name, false),
-          el('span', { class: 'grow', text: p.name }),
-          cb
-        ]);
-        cb.addEventListener('change', function () { selected[p.id] = cb.checked; update(); });
-        rows.push({ el: row, name: p.name.toLowerCase(), box: cb, id: p.id });
-        list.appendChild(row);
-      });
-      if (!group.members.length) list.appendChild(el('div', { class: 'muted', text: 'บอทยังไม่รู้จักใครในกลุ่มนี้ ให้เพื่อนพิมพ์ข้อความทักทายในกลุ่มก่อน' }));
-
-      var all = el('button', { class: 'secondary', text: 'เลือกทั้งหมด' });
-      all.style.cssText = 'width:auto;margin:0;padding:6px 12px;font-size:14px';
-      all.addEventListener('click', function () {
-        var every = rows.length > 0 && rows.every(function (r) { return selected[r.id]; });
-        rows.forEach(function (r) { selected[r.id] = !every; r.box.checked = !every; });
-        update();
-      });
+      var box = peopleBox(group, update);
+      var dest = destBox(group);
 
       function update() {
-        var n = ids().length;
+        var n = box.ids().length;
         if (n === 0) summary.textContent = 'ยังไม่ได้เลือกใคร';
         else if (d.perPerson) summary.textContent = 'เลือก ' + n + ' คน × ' + money(d.amountSatang) + ' = ' + money(d.amountSatang * n);
         else summary.textContent = 'เลือก ' + n + ' คน หารคนละประมาณ ' + money(d.amountSatang / n);
       }
 
-      // where to announce the bill
-      dest.replaceChildren();
-      [{ v: 'G:' + group.id, t: 'โพสต์การ์ดในกลุ่ม ' + group.name },
-       { v: 'P', t: 'ส่งข้อความส่วนตัวหาแต่ละคน (ต้องเป็นเพื่อนกับบอท)' }].forEach(function (o) {
-        var r = el('input', { type: 'radio', name: 'dest', value: o.v });
-        r.checked = o.v === destChoice;
-        r.addEventListener('change', function () { destChoice = o.v; });
-        dest.appendChild(el('label', { class: 'row' }, [el('span', { text: o.t }), r]));
-      });
-
-      var go = el('button', { text: 'ถัดไป' });
+      var go = el('button', { class: 'cta', type: 'button' }, [icon('check'), el('span', { text: 'ถัดไป' })]);
+      var goText = go.lastChild;
       go.addEventListener('click', function () {
         out.replaceChildren();
-        var picked = ids();
+        var picked = box.ids();
         if (picked.length === 0) { out.appendChild(el('div', { class: 'msg err', text: 'กรุณาเลือกอย่างน้อย 1 คน' })); return; }
-        go.disabled = true; go.textContent = 'กำลังส่ง…';
-        api(API + 'api/pay/pick', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userIds: picked, dest: destChoice }) })
+        go.disabled = true; goText.textContent = 'กำลังส่ง…';
+        post('api/pay/pick', { userIds: picked, dest: dest.value() })
           .then(function () {
-            show([el('div', { class: 'card' }, [el('div', { class: 'msg ok', text: 'ส่งการ์ดยืนยันไปที่แชทแล้ว กลับไปกด "ยืนยัน" ในแชทกับบอท' })])]);
+            show([el('div', { class: 'msg ok', text: 'ส่งการ์ดยืนยันไปที่แชทแล้ว กลับไปกด "ยืนยัน" ในแชทกับบอท' })]);
             if (window.liff && liff.isInClient && liff.isInClient()) setTimeout(function () { liff.closeWindow(); }, 1500);
           })
           .catch(function (e) {
-            go.disabled = false; go.textContent = 'ถัดไป';
+            go.disabled = false; goText.textContent = 'ถัดไป';
             out.appendChild(el('div', { class: 'msg err', text: e.message }));
           });
       });
 
-      var groupBar = el('div', { class: 'card' }, [el('div', { class: 'pick-row static' }, [
-        avatar(group.pictureUrl, group.name, true),
-        el('span', { class: 'grow' }, [el('strong', { text: group.name }), el('span', { class: 'muted block', text: 'เลือกคนในกลุ่มนี้' })])
-      ])]);
-      if (canGoBack) {
-        var back = el('button', { class: 'secondary', text: 'เปลี่ยนกลุ่ม' });
-        back.style.cssText = 'width:auto;margin:0;padding:6px 12px;font-size:14px';
-        back.addEventListener('click', chooseGroup);
-        groupBar.firstChild.appendChild(back);
-      }
-
-      var peopleCard = el('div', { class: 'card' }, [
-        el('div', { class: 'row' }, [el('strong', { text: 'เลือกคน' }), all]), search, list
-      ]);
-      show([head('เลือกคนที่จะเรียกเก็บ'), groupBar, peopleCard, el('div', { class: 'card' }, [summary, dest, go, out])]);
+      show([head(), groupBar(group, null), box.root, el('div', { class: 'card' }, [dest.root, el('div', { class: 'sub' }, [summary]), go, out])]);
       update();
     }
 
     if (d.groups.length === 1) choosePeople(d.groups[0], false); else chooseGroup();
+  }
+
+  // ───────── manage: who has paid, cash, waive, cancel a charge or a whole bill ─────────
+  var manageNotice = null;
+
+  function loadManage() {
+    return api(API + 'api/manage').then(renderManage);
+  }
+
+  function manageAction(path, body, okText) {
+    return post('api/manage/' + path, body)
+      .then(function (r) { manageNotice = { ok: true, text: (r && r.message) || okText }; return loadManage(); })
+      .catch(function (e) { manageNotice = { ok: false, text: e.message }; return loadManage(); });
+  }
+
+  function renderManage(bills) {
+    bar('จัดการบิล', toHome);
+    var nodes = [];
+    if (manageNotice) {
+      nodes.push(el('div', { class: 'msg ' + (manageNotice.ok ? 'ok' : 'err'), text: manageNotice.text }));
+      manageNotice = null;
+    }
+    if (!bills.length) nodes.push(el('div', { class: 'card muted', text: 'ตอนนี้ไม่มีบิลที่ยังเปิดอยู่ สั่งเก็บเงินใหม่ได้จากหน้าหลัก' }));
+    bills.forEach(function (b) { nodes.push(manageBill(b)); });
+    show(nodes);
+  }
+
+  function manageBill(b) {
+    var cancel = ibtn('trash', 'ยกเลิกทั้งบิล', function () {
+      if (!window.confirm('ยกเลิกทั้งบิล "' + b.title + '" ?\nทุกคนไม่ต้องจ่ายบิลนี้อีก (เงินที่รับไปแล้วระบบไม่ได้คืนให้)')) return;
+      manageAction('cancel-bill', { id: b.id }, 'ยกเลิกบิลแล้ว');
+    }, 'warn');
+    var parts = [
+      el('div', { class: 'row' }, [
+        el('span', { class: 'grow' }, [el('strong', { text: b.title }),
+          el('span', { class: 'muted block', text: (b.groupName ? 'กลุ่ม ' + b.groupName : 'ส่วนตัว') + ' · จ่ายแล้ว ฿' + baht(b.paidSatang) + ' จาก ฿' + baht(b.totalSatang) })]),
+        cancel
+      ])
+    ];
+
+    if (b.charges.length > 1) {
+      var chargeBox = el('div', { class: 'sub' });
+      b.charges.forEach(function (c) {
+        var del = ibtn('x', 'ยกเลิกรายการ', function () {
+          if (!window.confirm('ยกเลิกรายการ "' + c.title + '" (฿' + baht(c.totalSatang) + ') ?\nยอดของทุกคนจะลดลงตามส่วนแบ่งของรายการนี้')) return;
+          manageAction('cancel-charge', { id: c.id }, 'ยกเลิกรายการแล้ว');
+        });
+        chargeBox.appendChild(el('div', { class: 'row small' }, [el('span', { text: c.title + '  ฿' + baht(c.totalSatang) }), del]));
+      });
+      parts.push(chargeBox);
+    } else if (b.charges.length === 1) {
+      // A single charge is the whole bill: the trash icon above already covers it.
+    }
+
+    var people = el('div', { class: 'sub' });
+    b.items.forEach(function (i) { people.appendChild(manageItem(i)); });
+    parts.push(people);
+    return el('div', { class: 'card' }, parts);
+  }
+
+  function manageItem(i) {
+    var st;
+    if (i.status === 'PAID') st = pill('จ่ายแล้ว', 'ok');
+    else if (i.status === 'WAIVED') st = pill('ยกหนี้', 'grey');
+    else if (i.status === 'SUBMITTED') st = pill('รอตรวจสลิป', 'wait');
+    else st = pill('฿' + baht(i.remainingSatang) + (i.paidSatang > 0 ? ' (จ่ายแล้ว ฿' + baht(i.paidSatang) + ')' : ''), 'due');
+
+    var line = el('div', { class: 'li' }, [avatar(i.pictureUrl, i.name, false), el('span', { class: 'grow', text: i.name }), st]);
+    var wrap = el('div', {}, [line]);
+
+    if (i.status === 'SUBMITTED') {
+      wrap.appendChild(el('div', { class: 'muted small', text: 'มีสลิปรอตรวจ กลับไปกดยืนยันหรือปฏิเสธในแชทกับบอทก่อน' }));
+    } else if (i.status !== 'PAID' && i.status !== 'WAIVED') {
+      var form = el('div', { class: 'cashform' });
+      form.style.display = 'none';
+      var amount = el('input', { type: 'number', class: 'inp', inputmode: 'decimal', step: '0.01', min: '0.01', value: (i.remainingSatang / 100).toFixed(2), 'aria-label': 'ยอดที่ได้รับ (บาท)' });
+      var save = ibtn('check', 'บันทึกเงินสด', function () {
+        var v = parseFloat(amount.value);
+        if (!(v > 0)) { window.alert('กรุณาใส่ยอดที่ได้รับ'); return; }
+        save.disabled = true;
+        manageAction('paid', { itemId: i.id, amount: v }, 'บันทึกแล้ว');
+      }, 'ok');
+      form.appendChild(amount);
+      form.appendChild(save);
+
+      line.appendChild(ibtn('cash', 'รับเงินสดแล้ว', function () { form.style.display = form.style.display === 'none' ? '' : 'none'; }));
+      line.appendChild(ibtn('ban', 'ยกหนี้', function () {
+        if (!window.confirm('ยกหนี้ให้ ' + i.name + ' (ค้าง ฿' + baht(i.remainingSatang) + ') ?')) return;
+        manageAction('waive', { id: i.id }, 'ยกหนี้แล้ว');
+      }));
+      wrap.appendChild(form);
+    }
+    return wrap;
+  }
+
+  // ───────── app screens: home, new bill, what I owe ─────────
+  function promptPayCard(onSaved, required) {
+    var input = el('input', { type: 'text', inputmode: 'numeric', placeholder: 'เบอร์มือถือ 10 หลัก / เลขบัตร 13 หลัก', class: 'inp', maxlength: '17' });
+    var out = el('div');
+    var save = ibtn('check', 'บันทึกพร้อมเพย์', function () {
+      out.replaceChildren();
+      save.disabled = true;
+      post('api/app/promptpay', { id: input.value })
+        .then(function () { onSaved(); })
+        .catch(function (e) { save.disabled = false; out.appendChild(el('div', { class: 'msg err', text: e.message })); });
+    }, 'ok');
+    return el('div', { class: 'card' }, [
+      el('strong', { text: required ? 'ตั้งพร้อมเพย์สำหรับรับเงินก่อน' : 'เปลี่ยนเลขพร้อมเพย์' }),
+      el('div', { class: 'muted small', text: 'ผู้จ่ายจะเห็น QR ที่โอนเข้าเลขนี้' }),
+      el('div', { class: 'row sub' }, [el('span', { class: 'grow' }, [input]), save]), out
+    ]);
+  }
+
+  // One list row of the home screen: icon, title, one-line subtitle, chevron.
+  function homeRow(ic, title, sub, primary, onClick) {
+    var r = el('button', { class: 'li', type: 'button' }, [
+      el('span', { class: 'tint' + (primary ? ' accent' : '') }, [icon(ic)]),
+      el('span', { class: 'grow' }, [el('strong', { text: title }), el('span', { class: 'muted block', text: sub })]),
+      chev()
+    ]);
+    r.addEventListener('click', onClick);
+    return r;
+  }
+
+  function loadHome() { return api(API + 'api/app/home').then(renderHome); }
+
+  function renderHome(d) {
+    bar('PayYet');
+    var nodes = [];
+    nodes.push(el('div', { class: 'li' }, [avatar(d.pictureUrl, d.name, false),
+      el('span', { class: 'grow' }, [el('strong', { text: d.name }), el('span', { class: 'muted block', text: 'เก็บเงินในกลุ่ม LINE' })])]));
+
+    if (!d.hasPromptPay) nodes.push(promptPayCard(function () { loadHome(); }, true));
+
+    nodes.push(el('div', { class: 'card' }, [
+      homeRow('plus', 'เก็บเงินใหม่', 'สร้างบิลในกลุ่ม', true, function () { loadNew(); }),
+      homeRow('list', 'จัดการบิล', d.openBills > 0 ? d.openBills + ' บิล · ค้างรับ ' + money(d.receivableSatang) : 'ยังไม่มีบิลที่เปิดอยู่', false, function () { loadManage(); }),
+      homeRow('receipt', 'ที่ฉันต้องจ่าย', d.oweCount > 0 ? d.oweCount + ' รายการ · ' + money(d.oweSatang) : 'ไม่มีรายการค้าง', false, function () { loadOwe(); })
+    ]));
+
+    if (d.hasPromptPay) {
+      var holder = el('div');
+      var form = null;
+      var change = ibtn('edit', 'เปลี่ยนพร้อมเพย์', function () {
+        if (form) { holder.replaceChildren(); form = null; return; }
+        form = promptPayCard(function () { loadHome(); }, false);
+        holder.appendChild(form);
+      });
+      nodes.push(el('div', { class: 'row' }, [el('span', { class: 'muted small', text: 'พร้อมเพย์รับเงิน ' + (d.promptPayMasked || '') }), change]), holder);
+    }
+    show(nodes);
+  }
+
+  // ----- new bill form -----
+  function loadNew() { return api(API + 'api/app/new').then(renderNew); }
+
+  function renderNew(d) {
+    bar('เก็บเงินใหม่', toHome);
+
+    if (!d.hasPromptPay) { show([promptPayCard(function () { loadNew(); }, true)]); return; }
+    if (!d.groups.length) {
+      show([el('div', { class: 'card muted', text: 'ยังไม่มีกลุ่มให้เลือก ชวนบอทเข้ากลุ่ม แล้วให้ทุกคนพิมพ์ข้อความทักทายในกลุ่มก่อน' })]);
+      return;
+    }
+
+    function chooseGroup() {
+      bar('เลือกกลุ่ม', toHome);
+      show([groupList(d.groups, function (g) { form(g, d.groups.length > 1); })]);
+    }
+
+    function form(group, canGoBack) {
+      bar('เก็บเงินใหม่', canGoBack ? chooseGroup : toHome);
+      var perPerson = false;      // false = split a total, true = each person pays the amount
+      var title = el('input', { type: 'text', class: 'inp', placeholder: 'ชื่อรายการ เช่น ค่าข้าว', maxlength: '80', 'aria-label': 'ชื่อรายการ' });
+      var amount = el('input', { type: 'number', class: 'inp big', inputmode: 'decimal', step: '0.01', min: '0.01', placeholder: '฿ 0.00', 'aria-label': 'ยอดเงิน (บาท)' });
+      var summary = el('div', { class: 'muted small' });
+      var out = el('div');
+      var box = peopleBox(group, update);
+      var dest = destBox(group);
+
+      var segSplit = el('button', { class: 'on', type: 'button', text: 'หารยอดรวม' });
+      var segEach = el('button', { type: 'button', text: 'เก็บคนละ' });
+      function setMode(each) {
+        perPerson = each;
+        segSplit.className = each ? '' : 'on';
+        segEach.className = each ? 'on' : '';
+        update();
+      }
+      segSplit.addEventListener('click', function () { setMode(false); });
+      segEach.addEventListener('click', function () { setMode(true); });
+      amount.addEventListener('input', update);
+
+      function update() {
+        var n = box.ids().length;
+        var v = parseFloat(amount.value) || 0;
+        if (n === 0) summary.textContent = 'ยังไม่ได้เลือกใคร';
+        else if (v <= 0) summary.textContent = 'เลือก ' + n + ' คน · ใส่ยอดเงินด้านบน';
+        else if (perPerson) summary.textContent = 'เลือก ' + n + ' คน × ' + money(v * 100) + ' = ' + money(v * 100 * n);
+        else summary.textContent = 'เลือก ' + n + ' คน หารคนละประมาณ ' + money(v * 100 / n);
+      }
+
+      var go = el('button', { class: 'cta', type: 'button' }, [icon('check'), el('span', { text: 'สร้างบิล' })]);
+      var goText = go.lastChild;
+      go.addEventListener('click', function () {
+        out.replaceChildren();
+        var picked = box.ids();
+        var v = parseFloat(amount.value);
+        if (!(v > 0)) { out.appendChild(el('div', { class: 'msg err', text: 'กรุณาใส่ยอดเงิน' })); return; }
+        if (picked.length === 0) { out.appendChild(el('div', { class: 'msg err', text: 'กรุณาเลือกอย่างน้อย 1 คน' })); return; }
+        go.disabled = true; goText.textContent = 'กำลังสร้างบิล…';
+        post('api/app/create', { title: title.value, amount: v, perPerson: perPerson, userIds: picked, dest: dest.value() })
+          .then(renderCreated)
+          .catch(function (e) {
+            go.disabled = false; goText.textContent = 'สร้างบิล';
+            out.appendChild(el('div', { class: 'msg err', text: e.message }));
+          });
+      });
+
+      show([
+        groupBar(group, canGoBack ? chooseGroup : null),
+        el('div', { class: 'card' }, [title, el('div', { class: 'pad' }), amount, el('div', { class: 'seg' }, [segSplit, segEach])]),
+        box.root,
+        el('div', { class: 'card' }, [dest.root, el('div', { class: 'sub' }, [summary]), go, out])
+      ]);
+      update();
+    }
+
+    if (d.groups.length === 1) form(d.groups[0], false); else chooseGroup();
+  }
+
+  function renderCreated(res) {
+    bar('สร้างบิลแล้ว');
+    var out = el('div');
+    var parts = [el('div', { class: 'msg ok preline', text: res.summary }), el('div', { class: 'muted small pad', text: 'ยกเลิกได้ภายใน 10 นาที ถ้ายังไม่มีใครจ่าย' })];
+    var undoRow = el('div', { class: 'chips' });
+    (res.undo || []).forEach(function (u) {
+      var b = chip('undo', u.label, function () {
+        if (!window.confirm('ยกเลิก: ' + u.label + ' ?')) return;
+        b.disabled = true;
+        post('api/app/undo', { chargeId: u.chargeId })
+          .then(function (r) { out.replaceChildren(el('div', { class: 'msg ok', text: (r && r.message) || 'ยกเลิกแล้ว' })); })
+          .catch(function (e) { b.disabled = false; out.replaceChildren(el('div', { class: 'msg err', text: e.message })); });
+      }, 'warn');
+      undoRow.appendChild(b);
+    });
+    if (undoRow.childNodes.length) parts.push(undoRow);
+    parts.push(out);
+
+    show([el('div', { class: 'card' }, parts),
+      el('div', { class: 'chips' }, [chip('plus', 'สร้างอีก', loadNew), chip('list', 'จัดการบิล', loadManage), chip('home', 'หน้าหลัก', loadHome)])]);
+  }
+
+  // ----- what I owe -----
+  function loadOwe() { return api(API + 'api/app/owe').then(renderOwe); }
+
+  function renderOwe(list) {
+    bar('ที่ฉันต้องจ่าย', toHome);
+    if (!list.length) { show([el('div', { class: 'card muted', text: 'ไม่มีรายการค้างจ่าย 🎉' })]); return; }
+    var nodes = [];
+    list.forEach(function (i) {
+      var status = i.status === 'SUBMITTED' ? pill('รอตรวจสลิป', 'wait') : pill(money(i.remainingSatang), 'due');
+      var sub = 'เก็บโดย ' + i.collector + (i.paidSatang > 0 ? ' · จ่ายแล้ว ' + money(i.paidSatang) + ' จาก ' + money(i.amountSatang) : '');
+      var row = el('button', { class: 'li', type: 'button' }, [avatar(i.collectorPictureUrl, i.collector, false),
+        el('span', { class: 'grow' }, [el('strong', { text: i.title }), el('span', { class: 'muted block', text: sub })]), status, chev()]);
+      row.addEventListener('click', function () { window.location.href = window.location.pathname + '?b=' + encodeURIComponent(i.billToken); });
+      nodes.push(row);
+    });
+    show([el('div', { class: 'card' }, nodes)]);
   }
 
   fetch(API + 'api/pay/config').then(function (r) { return r.json(); }).then(function (cfg) {
@@ -376,10 +709,14 @@
     var st = q.get('liff.state') ? new URLSearchParams(q.get('liff.state').replace(/^\?/, '')) : null;
     billToken = q.get('b') || (st && st.get('b'));
     var mode = q.get('mode') || (st && st.get('mode'));
-    if (!billToken && mode !== 'pick') { fail('ลิงก์ไม่ถูกต้อง'); return; }
+    if (!billToken && ['pick', 'manage', 'new', 'owe', 'home'].indexOf(mode) < 0) mode = 'home';
     idToken = liff.getIDToken();
     if (!idToken) { fail('ไม่พบข้อมูลผู้ใช้ ลองเปิดจากแอป LINE อีกครั้ง'); return; }
     if (mode === 'pick') return loadPick();
+    if (mode === 'manage') return loadManage();
+    if (mode === 'new') return loadNew();
+    if (mode === 'owe') return loadOwe();
+    if (mode === 'home') return loadHome();
     return load();
   }).catch(function (e) { fail(e.message || 'โหลดไม่สำเร็จ'); });
 })();

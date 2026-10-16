@@ -311,4 +311,32 @@ public static class Cards
         };
         return Msg.Flex("เลือกคนที่จะเรียกเก็บ: " + title, bubble);
     }
+
+    /// <summary>Entry point to the "manage bills" page (record cash, waive, cancel).</summary>
+    public static object ManagePrompt(AppSettings s, int openBills, long unpaidSatang, string manageUrl)
+    {
+        var bubble = new
+        {
+            type = "bubble",
+            size = "kilo",
+            header = new { type = "box", layout = "vertical", paddingAll = "0px", contents = new object[] { Header(LogoUrl(s), "PayYet", "จัดการบิลของฉัน", Theme.Orange) } },
+            body = new
+            {
+                type = "box", layout = "vertical", paddingAll = "16px", spacing = "sm",
+                contents = new object[]
+                {
+                    new { type = "text", text = $"บิลที่ยังเปิดอยู่ {openBills} บิล", size = "md", weight = "bold", color = Theme.Brown },
+                    new { type = "text", text = "ยังค้างจ่ายรวม", size = "xs", color = Theme.Muted, margin = "md" },
+                    new { type = "text", text = "฿" + PayYet.Domain.Money.Format(unpaidSatang), size = "xxl", weight = "bold", color = unpaidSatang > 0 ? Theme.Orange : Theme.Green },
+                    new { type = "text", text = "ดูว่าใครจ่ายแล้ว บันทึกเงินสด ยกหนี้ หรือยกเลิกรายการ", size = "xs", color = Theme.Muted, wrap = true, margin = "md" }
+                }
+            },
+            footer = new
+            {
+                type = "box", layout = "vertical", paddingAll = "12px", backgroundColor = Theme.Cream,
+                contents = new object[] { Button("เปิดหน้าจัดการ", new { type = "uri", label = "เปิดหน้าจัดการ", uri = manageUrl }, "primary", Theme.Orange) }
+            }
+        };
+        return Msg.Flex("จัดการบิลของฉัน", bubble);
+    }
 }
