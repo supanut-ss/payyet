@@ -10,6 +10,8 @@ Design: [docs/DESIGN.md](docs/DESIGN.md) · Thai: [docs/DESIGN.th.md](docs/DESIG
 - Extra charges for the same group/debtor merge into the open bill.
 - Group bills: one card in the group; individual bills: private message.
 - Payment on a LIFF page: PromptPay QR (remaining amount) + slip upload. The collector approves/rejects in the private chat.
+- **App screens (no typing needed)**, all in one LIFF page, opened from the bot or a rich-menu button: `?mode=home` (hub with PromptPay setting), `?mode=new` (new-bill form: group → title, amount, split/each, people, destination → one tap creates the bill, 10-minute undo), `?mode=manage` (below) and `?mode=owe` (what I still have to pay, with a pay button). Opening the page with no parameters shows the hub. Typed commands keep working as shortcuts.
+- **Manage bills** (`จัดการ` → LIFF page): see who paid, record cash received (full or partial), waive a person's debt, cancel one charge or the whole bill; the group / debtors are told. Cancelling a charge is refused while a slip is waiting or someone already paid more than the new amount (waive them instead).
 - `ยอด` shows balances (private chat: what I owe / who owes me; group: open bills).
 - Daily 10:00 (Asia/Bangkok) reminder: one digest in the group, or one private message for individual bills.
 
@@ -61,3 +63,4 @@ tests/PayYet.Tests/ xUnit tests
 db/schema.sql       MySQL schema
 deploy-check/       one-off diagnostic page for the Plesk host (delete after use)
 ```
+"# payyet" 
