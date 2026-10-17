@@ -14,6 +14,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<ConversationState> States => Set<ConversationState>();
     public DbSet<ProcessedEvent> ProcessedEvents => Set<ProcessedEvent>();
+    public DbSet<RecurringBill> RecurringBills => Set<RecurringBill>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder b)
     {
@@ -42,6 +43,14 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasIndex(x => x.ScopeKey).IsUnique();
             e.HasOne(x => x.Creator).WithMany().HasForeignKey(x => x.CreatorId);
             e.HasOne(x => x.Group).WithMany().HasForeignKey(x => x.GroupId);
+        });
+
+        m.Entity<RecurringBill>(e =>
+        {
+            e.ToTable("recurring_bills");
+            e.HasOne(x => x.Creator).WithMany().HasForeignKey(x => x.CreatorId);
+            e.HasOne(x => x.Group).WithMany().HasForeignKey(x => x.GroupId);
+            e.HasIndex(x => new { x.Active, x.NextRunOn });
         });
 
         m.Entity<BillItem>(e =>

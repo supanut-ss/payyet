@@ -288,7 +288,7 @@ public class ReminderServiceTests : DbTestBase
         var group = AddGroup("กลุ่ม", me, a);
         var line = NewLine();
         var bills = new BillService(Db);
-        var reminders = new ReminderService(Db, line, new BillCardBuilder(Db, Options), Options, NullLogger<ReminderService>.Instance);
+        var reminders = new ReminderService(Db, line, new BillCardBuilder(Db, Options), new BillCreationService(Db, line, bills, new BillCardBuilder(Db, Options)), new DraftService(Db), Options, NullLogger<ReminderService>.Instance);
 
         var r = await bills.AddChargeAsync(me.Id, group.Id, null, "ข้าว", SplitMode.EQUAL, new[] { (a.Id, 10000L) });
 
@@ -316,7 +316,7 @@ public class ReminderServiceTests : DbTestBase
         var friend = AddUser("เพื่อน", friend: true);
         var stranger = AddUser("คนไม่ได้แอดบอท", friend: false);
         var bills = new BillService(Db);
-        var reminders = new ReminderService(Db, NewLine(), new BillCardBuilder(Db, Options), Options, NullLogger<ReminderService>.Instance);
+        var reminders = new ReminderService(Db, NewLine(), new BillCardBuilder(Db, Options), new BillCreationService(Db, NewLine(), bills, new BillCardBuilder(Db, Options)), new DraftService(Db), Options, NullLogger<ReminderService>.Instance);
 
         var b1 = await bills.AddChargeAsync(me.Id, null, friend.Id, "ยืม", SplitMode.EQUAL, new[] { (friend.Id, 5000L) });
         var b2 = await bills.AddChargeAsync(me.Id, null, stranger.Id, "ยืม", SplitMode.EQUAL, new[] { (stranger.Id, 5000L) });

@@ -40,6 +40,7 @@ public class BillService(AppDbContext db)
                 Title = title,
                 Status = BillStatus.OPEN,
                 ScopeKey = key,
+                RemindEveryDays = (await db.Users.AsNoTracking().Where(u => u.Id == creatorId).Select(u => (int?)u.RemindEveryDays).FirstOrDefaultAsync()) ?? 1,
                 CreatedAt = DateTime.UtcNow
             };
             db.Bills.Add(bill);

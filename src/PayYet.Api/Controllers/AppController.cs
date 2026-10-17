@@ -18,7 +18,8 @@ public class AppController(AppDbContext db, LineClient line, DraftService drafts
     private const decimal MaxAmountBaht = 1_000_000m;
 
     public record PromptPayRequest(string? Id);
-    public record CreateRequest(string? Title, decimal Amount, bool PerPerson, List<long>? UserIds, string? Dest, Dictionary<long, decimal>? Amounts = null);
+    public record CreateRequest(string? Title, decimal Amount, bool PerPerson, List<long>? UserIds, string? Dest, Dictionary<long, decimal>? Amounts = null, string? Repeat = null);
+    public record SettingsRequest(int RemindEveryDays);
     public record UndoRequest(long ChargeId);
 
     [HttpGet("home")]
@@ -40,6 +41,8 @@ public class AppController(AppDbContext db, LineClient line, DraftService drafts
             pictureUrl = string.IsNullOrEmpty(user.PictureUrl) ? null : user.PictureUrl,
             hasPromptPay = !string.IsNullOrEmpty(user.PromptPayId),
             promptPayMasked = Mask(user.PromptPayId),
+            remindEveryDays = user.RemindEveryDays,
+            recurringCount = await db.RecurringBills.CountAsync(r => r.CreatorId == user.Id && r.Active),
             openBills,
             receivableSatang = receivable,
             oweCount = oweOpen.Count,
@@ -99,11 +102,104 @@ public class AppController(AppDbContext db, LineClient line, DraftService drafts
         if (result.Error != null) return BadRequest(new { error = result.Error });
 
         var created = await creation.CreateAsync(user, result.Draft!);
+
+        // "ทำซ้ำ": remember this bill as a template; the daily job creates the next one a week / a month later
+        var repeatNote = "";
+        var freq = req.Repeat?.ToLowerInvariant() switch { "weekly" => "WEEKLY", "monthly" => "MONTHLY", _ => null };
+        if (freq != null)
+        {
+            var d = result.Draft!;
+            var today = BangkokTime.Today;
+            db.RecurringBills.Add(new RecurringBill
+            {
+                CreatorId = user.Id,
+                GroupId = d.Dest == "G" ? d.GroupId : null,
+                Dest = d.Dest,
+                Title = d.Title,
+                AmountSatang = d.Custom ? d.Total : Money.ToSatang(req.Amount),
+                PerPerson = req.PerPerson,
+                UserIdsJson = System.Text.Json.JsonSerializer.Serialize(d.Debtors.Select(x => x.UserId)),
+                AmountsJson = d.Custom ? System.Text.Json.JsonSerializer.Serialize(d.Debtors.ToDictionary(x => x.UserId, x => x.Satang ?? 0)) : null,
+                Frequency = freq,
+                AnchorDay = today.Day,
+                NextRunOn = ReminderService.NextRun(freq, today, today.Day),
+                CreatedAt = DateTime.UtcNow
+            });
+            await db.SaveChangesAsync();
+            repeatNote = freq == "WEEKLY" ? "\n🔁 สร้างบิลนี้ซ้ำทุกสัปดาห์" : "\n🔁 สร้างบิลนี้ซ้ำทุกเดือน";
+        }
+
         return Ok(new
         {
-            summary = created.Summary,
+            summary = created.Summary + repeatNote,
             undo = created.Undo.Select(u => new { label = u.Label, chargeId = u.ChargeId })
         });
+    }
+
+    /// <summary>Default reminder spacing for the bills this user creates (0 = never, 1 = daily, 3, 7).</summary>
+    [HttpPost("settings")]
+    public async Task<IActionResult> SaveSettings([FromBody] SettingsRequest req)
+    {
+        var user = await AuthUser();
+        if (user == null) return Unauthorized(NotSignedIn);
+        if (!ReminderService.AllowedEveryDays.Contains(req.RemindEveryDays)) return BadRequest(new { error = "ตัวเลือกไม่ถูกต้อง" });
+        user.RemindEveryDays = req.RemindEveryDays;
+        await db.SaveChangesAsync();
+        return Ok(new { message = "บันทึกแล้ว" });
+    }
+
+    // ---- recurring bills ----
+
+    [HttpGet("recurring")]
+    public async Task<IActionResult> Recurring()
+    {
+        var user = await AuthUser();
+        if (user == null) return Unauthorized(NotSignedIn);
+        var rows = await db.RecurringBills.Include(r => r.Group).Where(r => r.CreatorId == user.Id).OrderByDescending(r => r.Id).ToListAsync();
+        return Ok(rows.Select(r => new
+        {
+            id = r.Id,
+            title = r.Title,
+            groupName = r.Group?.Name,
+            frequency = r.Frequency,
+            nextRunOn = r.NextRunOn.ToString("yyyy-MM-dd"),
+            amountSatang = r.AmountSatang,
+            perPerson = r.PerPerson,
+            people = System.Text.Json.JsonSerializer.Deserialize<List<long>>(r.UserIdsJson)?.Count ?? 0,
+            active = r.Active,
+            lastError = r.LastError
+        }));
+    }
+
+    public record RecurringId(long Id);
+
+    [HttpPost("recurring/toggle")]
+    public async Task<IActionResult> ToggleRecurring([FromBody] RecurringId req)
+    {
+        var user = await AuthUser();
+        if (user == null) return Unauthorized(NotSignedIn);
+        var rec = await db.RecurringBills.FirstOrDefaultAsync(r => r.Id == req.Id && r.CreatorId == user.Id);
+        if (rec == null) return NotFound(new { error = "ไม่พบบิลประจำนี้" });
+        rec.Active = !rec.Active;
+        if (rec.Active)   // resuming: never run for a date that already passed
+        {
+            var today = BangkokTime.Today;
+            while (rec.NextRunOn <= today) rec.NextRunOn = ReminderService.NextRun(rec.Frequency, rec.NextRunOn, rec.AnchorDay);
+        }
+        await db.SaveChangesAsync();
+        return Ok(new { message = rec.Active ? "เปิดใช้งานแล้ว" : "หยุดชั่วคราวแล้ว" });
+    }
+
+    [HttpPost("recurring/delete")]
+    public async Task<IActionResult> DeleteRecurring([FromBody] RecurringId req)
+    {
+        var user = await AuthUser();
+        if (user == null) return Unauthorized(NotSignedIn);
+        var rec = await db.RecurringBills.FirstOrDefaultAsync(r => r.Id == req.Id && r.CreatorId == user.Id);
+        if (rec == null) return NotFound(new { error = "ไม่พบบิลประจำนี้" });
+        db.RecurringBills.Remove(rec);
+        await db.SaveChangesAsync();
+        return Ok(new { message = "ลบบิลประจำแล้ว" });
     }
 
     [HttpPost("undo")]
@@ -166,6 +262,38 @@ public class AppController(AppDbContext db, LineClient line, DraftService drafts
                 };
             })
         });
+    }
+
+    /// <summary>Same data as <see cref="History"/> as a CSV file (UTF-8 with BOM so Excel shows Thai correctly).</summary>
+    [HttpGet("history/export")]
+    public async Task<IActionResult> ExportHistory([FromQuery] string? role, [FromQuery] string? from, [FromQuery] string? to)
+    {
+        var result = await History(role, from, to);
+        if (result is not OkObjectResult { Value: { } v }) return result;
+
+        static string Cell(string? t)
+        {
+            t ??= "";
+            if (t.Length > 0 && "=+-@".Contains(t[0])) t = "'" + t;                  // no spreadsheet formula injection
+            return "\"" + t.Replace("\"", "\"\"") + "\"";
+        }
+
+        var json = System.Text.Json.JsonSerializer.SerializeToElement(v);
+        var collected = json.GetProperty("role").GetString() == "collected";
+        var sb = new System.Text.StringBuilder();
+        sb.Append("วันที่,รายการ,").Append(collected ? "ผู้จ่าย" : "ผู้เก็บ").Append(",กลุ่ม,จำนวนเงิน (บาท)\r\n");
+        foreach (var i in json.GetProperty("items").EnumerateArray())
+        {
+            sb.Append(Cell(i.GetProperty("paidAt").GetString())).Append(',')
+              .Append(Cell(i.GetProperty("title").GetString())).Append(',')
+              .Append(Cell(i.GetProperty("name").GetString())).Append(',')
+              .Append(Cell(i.TryGetProperty("groupName", out var g) && g.ValueKind == System.Text.Json.JsonValueKind.String ? g.GetString() : null)).Append(',')
+              .Append((i.GetProperty("amountSatang").GetInt64() / 100m).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)).Append("\r\n");
+        }
+        sb.Append(",,,รวม,").Append((json.GetProperty("totalSatang").GetInt64() / 100m).ToString("0.00", System.Globalization.CultureInfo.InvariantCulture)).Append("\r\n");
+
+        var bytes = new System.Text.UTF8Encoding(true).GetPreamble().Concat(System.Text.Encoding.UTF8.GetBytes(sb.ToString())).ToArray();
+        return File(bytes, "text/csv; charset=utf-8", $"payyet-{json.GetProperty("from").GetString()}_{json.GetProperty("to").GetString()}.csv");
     }
 
     /// <summary>What the signed-in user still has to pay, with the token that opens the pay page.</summary>

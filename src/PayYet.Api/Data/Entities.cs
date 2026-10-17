@@ -16,6 +16,7 @@ public class AppUser
     public string? PromptPayId { get; set; }
     public bool IsFriend { get; set; }
     public long? LastGroupId { get; set; }
+    public int RemindEveryDays { get; set; } = 1;    // default for the bills this user creates: 0 = never, 1 = daily, 3, 7
     public DateTime CreatedAt { get; set; }
 
     public string Name => string.IsNullOrWhiteSpace(DisplayName) ? "(ไม่ทราบชื่อ)" : DisplayName!;
@@ -54,12 +55,36 @@ public class Bill
     public string Title { get; set; } = "";
     public DateTime? DueAt { get; set; }
     public DateOnly? LastRemindedOn { get; set; }
+    public int RemindEveryDays { get; set; } = 1;       // 0 = no reminders for this bill
     public BillStatus Status { get; set; } = BillStatus.OPEN;
     public string? ScopeKey { get; set; }               // set only while OPEN → one open bill per scope
     public string? InviteCode { get; set; }
     public DateTime CreatedAt { get; set; }
     public List<BillItem> Items { get; set; } = new();
     public List<BillCharge> Charges { get; set; } = new();
+}
+
+/// <summary>A bill the collector asked to be created again every week or month (created by the daily job).</summary>
+public class RecurringBill
+{
+    public long Id { get; set; }
+    public long CreatorId { get; set; }
+    public AppUser Creator { get; set; } = null!;
+    public long? GroupId { get; set; }                  // null = private bills
+    public ChatGroup? Group { get; set; }
+    public string Dest { get; set; } = "G";             // G or P, same meaning as Draft.Dest
+    public string Title { get; set; } = "";
+    public long AmountSatang { get; set; }
+    public bool PerPerson { get; set; }
+    public string UserIdsJson { get; set; } = "[]";     // debtors, as user ids
+    public string? AmountsJson { get; set; }            // optional {userId: satang} when the amounts were edited per person
+    public string Frequency { get; set; } = "MONTHLY";  // WEEKLY | MONTHLY
+    public int AnchorDay { get; set; }                  // day of month for MONTHLY (clamped to the month length)
+    public DateOnly NextRunOn { get; set; }
+    public bool Active { get; set; } = true;
+    public DateOnly? LastRunOn { get; set; }
+    public string? LastError { get; set; }
+    public DateTime CreatedAt { get; set; }
 }
 
 public class BillItem

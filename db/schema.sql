@@ -9,6 +9,7 @@ CREATE TABLE users (
   promptpay_id  VARCHAR(20)  NULL,
   is_friend     TINYINT(1)   NOT NULL DEFAULT 0,
   last_group_id BIGINT       NULL,
+  remind_every_days INT      NOT NULL DEFAULT 1,   -- default reminder frequency of this user's bills (0 = never)
   created_at    DATETIME(3)  NOT NULL,
   UNIQUE KEY ux_users_line (line_user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -42,7 +43,8 @@ CREATE TABLE bills (
   group_id          BIGINT       NULL,          -- NULL = individual bill
   title             VARCHAR(255) NOT NULL,
   due_at            DATETIME(3)  NULL,
-  last_reminded_on  DATE         NULL,          -- Bangkok date of the last daily reminder
+  last_reminded_on  DATE         NULL,          -- Bangkok date of the last reminder
+  remind_every_days INT          NOT NULL DEFAULT 1,   -- 0 = no reminders, 1 = daily, 3, 7
   status            VARCHAR(16)  NOT NULL DEFAULT 'OPEN',   -- OPEN | CLOSED | CANCELLED
   scope_key         VARCHAR(80)  NULL,          -- only while OPEN: 'G:<creator>:<group>' / 'P:<creator>:<debtor>'
   invite_code       VARCHAR(16)  NULL,
@@ -115,4 +117,26 @@ CREATE TABLE conversation_state (               -- wizard progress in the 1:1 ch
 CREATE TABLE processed_events (                 -- webhook idempotency; purge rows older than 7 days
   webhook_event_id  VARCHAR(64) NOT NULL PRIMARY KEY,
   processed_at      DATETIME(3) NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE recurring_bills (
+  id             BIGINT AUTO_INCREMENT PRIMARY KEY,
+  creator_id     BIGINT       NOT NULL,
+  group_id       BIGINT       NULL,
+  dest           VARCHAR(2)   NOT NULL DEFAULT 'G',
+  title          VARCHAR(255) NOT NULL,
+  amount_satang  BIGINT       NOT NULL,
+  per_person     TINYINT(1)   NOT NULL DEFAULT 0,
+  user_ids_json  TEXT         NOT NULL,
+  amounts_json   TEXT         NULL,
+  frequency      VARCHAR(8)   NOT NULL,        -- WEEKLY | MONTHLY
+  anchor_day     INT          NOT NULL DEFAULT 1,
+  next_run_on    DATE         NOT NULL,
+  active         TINYINT(1)   NOT NULL DEFAULT 1,
+  last_run_on    DATE         NULL,
+  last_error     VARCHAR(255) NULL,
+  created_at     DATETIME(3)  NOT NULL,
+  KEY ix_recurring_due (active, next_run_on),
+  CONSTRAINT fk_rec_creator FOREIGN KEY (creator_id) REFERENCES users(id),
+  CONSTRAINT fk_rec_group   FOREIGN KEY (group_id)   REFERENCES `groups`(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

@@ -233,6 +233,7 @@ public class ManageController(AppDbContext db, LineClient line, BillManageServic
 {
     public record PaidRequest(long ItemId, decimal? Amount);
     public record IdRequest(long Id);
+    public record ReminderRequest(long Id, int Days);
     public record EditChargeRequest(long Id, string? Title, Dictionary<long, decimal>? Amounts);
 
     [HttpGet]
@@ -248,6 +249,7 @@ public class ManageController(AppDbContext db, LineClient line, BillManageServic
             groupName = b.Group?.Name,
             title = b.Charges.OrderBy(c => c.Id).Select(c => c.Title).FirstOrDefault() ?? b.Title,
             createdAt = b.CreatedAt,
+            remindEveryDays = b.RemindEveryDays,
             totalSatang = b.Items.Sum(i => i.AmountSatang),
             paidSatang = b.Items.Sum(i => i.PaidSatang),
             charges = b.Charges.OrderBy(c => c.Id).Select(c => new
@@ -295,6 +297,20 @@ public class ManageController(AppDbContext db, LineClient line, BillManageServic
         // Only the final "everyone paid" notice goes out right away.
         if (!r.Bill.GroupId.HasValue || done) await Announce(r.Bill, text, item);
         return Ok(new { message = r.Message });
+    }
+
+    /// <summary>How often the bot reminds about this bill: 0 = never, 1 = daily, 3, 7.</summary>
+    [HttpPost("reminder")]
+    public async Task<IActionResult> SetReminder([FromBody] ReminderRequest req)
+    {
+        var user = await AuthUser();
+        if (user == null) return Unauthorized(new { error = "เข้าสู่ระบบไม่สำเร็จ ลองเปิดจากแอป LINE อีกครั้ง" });
+        if (!ReminderService.AllowedEveryDays.Contains(req.Days)) return BadRequest(new { error = "ตัวเลือกไม่ถูกต้อง" });
+        var bill = await db.Bills.FirstOrDefaultAsync(b => b.Id == req.Id && b.CreatorId == user.Id && b.Status == BillStatus.OPEN);
+        if (bill == null) return BadRequest(new { error = "ไม่พบบิลนี้" });
+        bill.RemindEveryDays = req.Days;
+        await db.SaveChangesAsync();
+        return Ok(new { message = req.Days == 0 ? "ปิดการเตือนบิลนี้แล้ว" : "ตั้งการเตือนแล้ว" });
     }
 
     /// <summary>Rename a charge and/or change what each person owes for it.</summary>
