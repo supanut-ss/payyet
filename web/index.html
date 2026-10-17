@@ -3,6 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>PayYet — เก็บเงินในกลุ่ม LINE ง่ายๆ</title>
+<meta name="description" content="PayYet บอท LINE ช่วยเก็บเงินในกลุ่มหรือรายคน มี QR พร้อมเพย์ แนบสลิป และเตือนอัตโนมัติ">
+<meta property="og:title" content="PayYet — เก็บเงินในกลุ่ม LINE ง่ายๆ">
+<meta property="og:description" content="สั่งเก็บเงินด้วยบรรทัดเดียว จ่ายด้วย QR พร้อมเพย์ เตือนอัตโนมัติ">
+<meta property="og:image" content="img/logo-512.webp">
 <meta name="theme-color" content="#fff8ec" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#1d1308" media="(prefers-color-scheme: dark)">
 <meta name="mobile-web-app-capable" content="yes">
@@ -10,236 +15,414 @@
 <meta name="apple-mobile-web-app-title" content="PayYet">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="manifest" href="manifest.webmanifest">
-<title>PayYet — เก็บเงินในกลุ่ม LINE ง่ายๆ</title>
-<meta name="description" content="PayYet บอท LINE ช่วยเก็บเงินในกลุ่มหรือรายคน มี QR พร้อมเพย์ แนบสลิป และเตือนอัตโนมัติ">
-<meta property="og:title" content="PayYet — เก็บเงินในกลุ่ม LINE ง่ายๆ">
-<meta property="og:description" content="สั่งเก็บเงินด้วยบรรทัดเดียว จ่ายด้วย QR พร้อมเพย์ เตือนอัตโนมัติ">
-<meta property="og:image" content="img/logo-512.webp">
 <link rel="icon" type="image/png" href="img/favicon-48.png">
 <link rel="apple-touch-icon" href="img/apple-touch-icon.png">
 <style>
   :root {
     --bg:#fff8ec; --card:#ffffff; --text:#3b1f0a; --muted:#7a5a3f; --line:#f1dcc0;
     --brand:#ff8a00; --brand-dark:#c25e00; --brand-soft:#ffe9c7; --accent:#ffc400; --onbrand:#2b1400;
-    --code-bg:#fff1d6;
+    --ok:#1a9c4a; --ok-soft:#dff5e6; --line-green:#06c755; --shadow:0 18px 50px rgba(194,94,0,.18);
+    --hero-a:#ffe2b0; --hero-b:#fff8ec;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg:#1d1308; --card:#2a1c0e; --text:#fbefdc; --muted:#c9ab88; --line:#4a3319;
       --brand:#ffa31f; --brand-dark:#ffbf5e; --brand-soft:#3b2810; --accent:#ffc400; --onbrand:#2b1400;
-      --code-bg:#3b2810;
+      --ok:#3ddc84; --ok-soft:#173a25; --shadow:0 18px 50px rgba(0,0,0,.5);
+      --hero-a:#3b2410; --hero-b:#1d1308;
     }
   }
-  * { box-sizing: border-box; }
-  html { scroll-behavior: smooth; }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; -webkit-text-size-adjust:100%; }
   body {
-    margin:0; background:var(--bg); color:var(--text);
-    font:16px/1.65 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans Thai","Sarabun",sans-serif;
+    margin:0; background:var(--bg); color:var(--text); -webkit-tap-highlight-color:transparent;
+    font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,"Noto Sans Thai","Sarabun",sans-serif;
+    padding:0 env(safe-area-inset-right) 0 env(safe-area-inset-left);
   }
-  .wrap { max-width:960px; margin:0 auto; padding:0 16px; }
-  header.hero { text-align:center; padding:40px 0 28px; }
-  .logo { width:min(300px,70vw); height:auto; display:block; margin:0 auto 8px; }
-  h1 { font-size:clamp(26px,5vw,38px); line-height:1.25; margin:8px 0 10px; letter-spacing:-.01em; }
-  .lead { font-size:clamp(16px,2.5vw,19px); color:var(--muted); max-width:34em; margin:0 auto 22px; }
-  .cta { display:flex; flex-wrap:wrap; gap:10px; justify-content:center; }
+  .wrap { max-width:1080px; margin:0 auto; padding:0 20px; }
+  h1,h2,h3,p { margin:0; }
+  svg.i { width:1em; height:1em; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; flex:none; }
+  a:focus-visible, button:focus-visible, summary:focus-visible { outline:3px solid var(--accent); outline-offset:3px; border-radius:12px; }
+
+  /* ---------- top bar ---------- */
+  .top { position:sticky; top:0; z-index:30; background:color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter:blur(10px);
+         border-bottom:1px solid var(--line); padding-top:env(safe-area-inset-top); }
+  .top .wrap { display:flex; align-items:center; gap:10px; min-height:56px; }
+  .brand { display:flex; align-items:center; gap:10px; font-weight:800; font-size:19px; letter-spacing:-.01em; }
+  .brand img { width:34px; height:34px; border-radius:10px; }
+  .top .btn { margin-left:auto; min-height:40px; padding:6px 16px; font-size:14px; }
+
+  /* ---------- buttons ---------- */
   .btn {
-    display:inline-flex; align-items:center; justify-content:center; min-height:46px; padding:10px 22px;
-    border-radius:999px; font-weight:700; text-decoration:none; font-size:16px;
-    background:var(--brand); color:var(--onbrand); border:2px solid var(--brand);
+    display:inline-flex; align-items:center; justify-content:center; gap:8px; min-height:52px; padding:10px 26px;
+    border-radius:999px; font-weight:800; text-decoration:none; font-size:17px; cursor:pointer; border:2px solid var(--brand);
+    background:var(--brand); color:var(--onbrand); touch-action:manipulation; font-family:inherit;
+    transition:transform .15s ease, box-shadow .15s ease;
   }
-  .btn.secondary { background:transparent; color:var(--text); border-color:var(--line); }
-  .btn:focus-visible, a:focus-visible { outline:3px solid var(--accent); outline-offset:2px; }
-  section { padding:26px 0; }
-  h2 { font-size:clamp(21px,3.4vw,27px); margin:0 0 16px; }
-  .grid { display:grid; gap:14px; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); }
-  .card { background:var(--card); border:1px solid var(--line); border-radius:18px; padding:18px; }
-  .card h3 { margin:0 0 6px; font-size:18px; }
-  .card p { margin:0; color:var(--muted); font-size:15px; }
-  .step-no {
-    width:36px; height:36px; border-radius:50%; background:var(--brand); color:var(--onbrand);
-    display:inline-flex; align-items:center; justify-content:center; font-weight:800; margin-bottom:10px;
-  }
-  code {
-    background:var(--code-bg); border-radius:8px; padding:2px 8px; font:600 15px/1.5 ui-monospace,Consolas,"Noto Sans Thai",monospace;
-    word-break:break-word;
-  }
-  table { width:100%; border-collapse:collapse; background:var(--card); border:1px solid var(--line); border-radius:18px; overflow:hidden; }
-  th, td { text-align:left; padding:12px 14px; vertical-align:top; border-bottom:1px solid var(--line); font-size:15px; }
-  tr:last-child td { border-bottom:0; }
-  th { background:var(--brand-soft); font-size:14px; }
-  td:first-child { white-space:nowrap; }
-  @media (max-width:560px) { td:first-child { white-space:normal; } }
-  .note { color:var(--muted); font-size:14px; margin-top:12px; }
-  footer { border-top:1px solid var(--line); margin-top:20px; padding:22px 0 40px; color:var(--muted); font-size:14px; text-align:center; }
-  footer p { margin:4px 0; }
+  .btn:hover { transform:translateY(-2px); box-shadow:0 10px 24px rgba(255,138,0,.35); }
+  .btn:active { transform:scale(.97); }
+  .btn.line { background:var(--line-green); border-color:var(--line-green); color:#fff; }
+  .btn.line:hover { box-shadow:0 10px 24px rgba(6,199,85,.35); }
+  .btn.ghost { background:transparent; color:var(--text); border-color:var(--line); }
   .hidden { display:none !important; }
 
-  /* ---------- all screens: safe areas, touch, no tap flash ---------- */
-  html { -webkit-text-size-adjust:100%; }
-  body { -webkit-tap-highlight-color:transparent; padding-left:env(safe-area-inset-left); padding-right:env(safe-area-inset-right); }
-  .btn { min-height:48px; touch-action:manipulation; }
-  section { scroll-margin-top:72px; }
-  .tabbar, .appbar { display:none; }
+  /* ---------- hero ---------- */
+  .hero { background:radial-gradient(900px 500px at 80% 0%, var(--hero-a), transparent 70%), var(--hero-b); overflow:hidden; }
+  .hero .wrap { display:grid; gap:28px; align-items:center; padding-top:34px; padding-bottom:44px; }
+  .eyebrow { display:inline-flex; align-items:center; gap:8px; background:var(--brand-soft); color:var(--brand-dark);
+             font-weight:700; font-size:14px; padding:6px 14px; border-radius:999px; }
+  h1 { font-size:clamp(34px,8vw,60px); line-height:1.12; letter-spacing:-.02em; margin:14px 0 14px; }
+  h1 em { font-style:normal; color:var(--brand); }
+  .lead { font-size:clamp(17px,2.6vw,21px); color:var(--muted); max-width:26em; }
+  .cta { display:flex; flex-wrap:wrap; gap:12px; margin-top:24px; }
+  .proof { display:flex; flex-wrap:wrap; gap:8px 18px; margin-top:22px; color:var(--muted); font-size:14px; font-weight:600; }
+  .proof span { display:inline-flex; align-items:center; gap:6px; }
+  .proof .i { color:var(--ok); font-size:18px; }
 
-  /* ---------- desktop: roomier ---------- */
-  @media (min-width:1024px) {
-    .wrap { max-width:1080px; padding:0 24px; }
-    header.hero { padding:56px 0 40px; }
-    .grid { grid-template-columns:repeat(3,1fr); }
-    .card { padding:22px; transition:transform .15s, box-shadow .15s; }
-    .card:hover { transform:translateY(-2px); box-shadow:0 8px 24px rgba(194,94,0,.12); }
+  /* ---------- phone mockup ---------- */
+  .stage { display:flex; justify-content:center; }
+  .phone {
+    width:min(320px,86vw); border-radius:38px; padding:12px; background:#1b1b1f; box-shadow:var(--shadow);
+    transform:rotate(2deg);
   }
+  .screen { background:#8fb1d6; border-radius:28px; overflow:hidden; min-height:470px; display:flex; flex-direction:column; }
+  .screen.pay { background:#f4f5f8; min-height:420px; }
+  .sbar { background:#fff; color:#1c1e21; font-weight:700; font-size:14px; padding:10px 14px; display:flex; align-items:center; gap:8px; }
+  .sbar .dot { width:26px; height:26px; border-radius:50%; background:var(--brand); display:grid; place-items:center; color:#fff; font-size:14px; }
+  .chat { padding:14px 12px; display:flex; flex-direction:column; gap:10px; flex:1; }
+  .msg { max-width:82%; padding:9px 13px; border-radius:18px; font-size:15px; line-height:1.4; color:#1c1e21; }
+  .msg.me { align-self:flex-end; background:#a6e87c; border-bottom-right-radius:5px; }
+  .bubble { align-self:flex-start; background:#fff; border-radius:18px; padding:14px; width:92%; box-shadow:0 2px 8px rgba(0,0,0,.12); color:#1c1e21; }
+  .bubble h3 { font-size:15px; color:var(--brand-dark); display:flex; align-items:center; justify-content:space-between; }
+  .bubble .amt { font-size:30px; font-weight:800; line-height:1.15; margin:2px 0; }
+  .bubble .sub { color:#6b7280; font-size:13px; }
+  .who { display:flex; align-items:center; gap:10px; padding:7px 0; border-top:1px solid #eef0f3; font-size:14px; }
+  .who:first-of-type { margin-top:10px; }
+  .av { width:30px; height:30px; border-radius:50%; display:grid; place-items:center; color:#fff; font-weight:800; font-size:13px; flex:none; }
+  .who .st { margin-left:auto; font-size:12px; font-weight:700; padding:3px 10px; border-radius:99px; }
+  .st.done { background:var(--ok-soft); color:#1a9c4a; } .st.wait { background:#fff2dd; color:#c25e00; }
+  .pay-btn { display:flex; align-items:center; justify-content:center; gap:6px; margin-top:10px; background:var(--line-green); color:#fff;
+             border-radius:12px; padding:10px; font-weight:800; font-size:14px; }
 
-  /* ---------- tablet: two columns, app chrome ---------- */
-  @media (min-width:600px) and (max-width:1023px) {
-    .grid { grid-template-columns:repeat(2,1fr); }
-  }
+  /* sequential reveal of the chat (static when motion is reduced) */
+  .seq { opacity:0; transform:translateY(10px); animation:pop .5s ease forwards; }
+  .seq.s1 { animation-delay:.4s; } .seq.s2 { animation-delay:1.3s; } .seq.s3 { animation-delay:2.4s; }
+  @keyframes pop { to { opacity:1; transform:none; } }
 
-  /* ---------- mobile + tablet: behave like an app ---------- */
-  @media (max-width:1023px), (display-mode:standalone) {
-    body { padding-bottom:calc(64px + env(safe-area-inset-bottom)); overscroll-behavior-y:none; }
-    .appbar {
-      display:flex; align-items:center; gap:10px; position:sticky; top:0; z-index:20;
-      padding:calc(8px + env(safe-area-inset-top)) 16px 8px; background:var(--bg);
-      border-bottom:1px solid var(--line); font-weight:800; font-size:18px;
-    }
-    .appbar img { width:32px; height:32px; border-radius:9px; }
-    header.hero { padding:20px 0 14px; }
-    .logo { width:min(180px,45vw); }
-    .tabbar {
-      display:grid; grid-template-columns:repeat(3,1fr); position:fixed; left:0; right:0; bottom:0; z-index:30;
-      padding-bottom:env(safe-area-inset-bottom); background:var(--card); border-top:1px solid var(--line);
-    }
-    .tabbar a {
-      display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; min-height:56px;
-      color:var(--muted); text-decoration:none; font-size:12px; font-weight:600; touch-action:manipulation;
-    }
-    .tabbar a svg { width:24px; height:24px; fill:none; stroke:currentColor; stroke-width:2; stroke-linecap:round; stroke-linejoin:round; }
-    .tabbar a.active { color:var(--brand-dark); }
-    .card { border-radius:20px; }
-    footer { padding-bottom:24px; }
-  }
+  /* ---------- sections ---------- */
+  section { padding:60px 0; scroll-margin-top:64px; }
+  .kicker { color:var(--brand-dark); font-weight:800; font-size:14px; letter-spacing:.04em; }
+  h2 { font-size:clamp(26px,5vw,40px); line-height:1.2; letter-spacing:-.015em; margin:6px 0 10px; }
+  .sub-h { color:var(--muted); font-size:18px; max-width:30em; }
+  .head { margin-bottom:30px; }
 
-  /* ---------- phone: command table becomes stacked cards ---------- */
-  @media (max-width:640px) {
-    table, tbody, tr, td { display:block; width:100%; }
-    table { background:transparent; border:0; }
-    thead { display:none; }
-    tr { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:12px 14px; margin-bottom:10px; }
-    td { border:0; padding:2px 0; }
-    td:first-child { font-weight:700; }
-    td:last-child { color:var(--muted); }
-    .cta .btn { flex:1 1 100%; }
+  /* steps: swipeable on phones, 3 columns on desktop */
+  .steps { display:grid; grid-auto-flow:column; grid-auto-columns:78%; gap:14px; overflow-x:auto; scroll-snap-type:x mandatory;
+           padding:4px 20px 18px; margin:0 -20px; scrollbar-width:none; }
+  .steps::-webkit-scrollbar { display:none; }
+  .step { scroll-snap-align:center; background:var(--card); border:1px solid var(--line); border-radius:28px; padding:24px 22px 26px; position:relative; }
+  .step .no { position:absolute; top:16px; right:20px; font-size:64px; font-weight:900; line-height:1; color:var(--brand-soft); }
+  .badge { width:64px; height:64px; border-radius:20px; display:grid; place-items:center; font-size:32px; color:#fff; margin-bottom:16px;
+           background:linear-gradient(135deg,var(--brand),#ffb347); }
+  .badge.g { background:linear-gradient(135deg,#06c755,#5fe39a); }
+  .badge.b { background:linear-gradient(135deg,#3b82f6,#7fb2ff); }
+  .step h3 { font-size:21px; margin-bottom:4px; }
+  .step p { color:var(--muted); font-size:15px; }
+  code { background:var(--brand-soft); border-radius:8px; padding:2px 8px; font:700 14px/1.5 ui-monospace,Consolas,"Noto Sans Thai",monospace; word-break:break-word; }
+
+  /* showcase: text + phone, alternating */
+  .show .wrap { display:grid; gap:34px; align-items:center; }
+  .pill-list { display:grid; gap:12px; margin-top:20px; }
+  .pill-list li { list-style:none; display:flex; align-items:center; gap:12px; font-weight:700; font-size:17px; }
+  .pill-list { padding:0; }
+  .pill-list .ic { width:42px; height:42px; border-radius:14px; display:grid; place-items:center; background:var(--brand-soft); color:var(--brand-dark); font-size:22px; flex:none; }
+  .alt { background:linear-gradient(180deg,transparent,var(--brand-soft) 18%,var(--brand-soft) 82%,transparent); }
+  .qr { width:150px; height:150px; margin:14px auto 8px; background:#fff; border-radius:16px; padding:10px; box-shadow:0 2px 8px rgba(0,0,0,.1); }
+  .pay-card { margin:14px; background:#fff; border-radius:20px; padding:16px; text-align:center; color:#1c1e21; box-shadow:0 2px 8px rgba(0,0,0,.08); }
+  .pay-card .amt { font-size:34px; font-weight:800; }
+  .upload { display:flex; align-items:center; justify-content:center; gap:8px; border:2px dashed #cfd4dc; border-radius:14px; padding:10px; margin-top:10px; color:#6b7280; font-size:14px; font-weight:600; }
+  .toast { margin:0 14px 14px; display:flex; align-items:center; gap:10px; background:var(--ok-soft); color:#1a9c4a; border-radius:16px; padding:12px 14px; font-weight:800; }
+
+  /* bento features */
+  .bento { display:grid; gap:12px; grid-template-columns:repeat(2,1fr); }
+  .tile { background:var(--card); border:1px solid var(--line); border-radius:24px; padding:18px 16px; display:flex; flex-direction:column; gap:10px; }
+  .tile .ic { width:46px; height:46px; border-radius:15px; display:grid; place-items:center; font-size:24px; background:var(--brand-soft); color:var(--brand-dark); }
+  .tile h3 { font-size:17px; line-height:1.3; }
+  .tile p { color:var(--muted); font-size:14px; line-height:1.5; }
+  .tile.hot { background:linear-gradient(135deg,var(--brand),#ffb347); border:0; color:var(--onbrand); grid-column:span 2; }
+  .tile.hot .ic { background:rgba(255,255,255,.35); color:var(--onbrand); }
+  .tile.hot p { color:rgba(43,20,0,.8); }
+
+  /* commands */
+  details { background:var(--card); border:1px solid var(--line); border-radius:22px; padding:6px 20px; }
+  summary { cursor:pointer; list-style:none; min-height:56px; display:flex; align-items:center; justify-content:space-between; font-weight:800; font-size:18px; }
+  summary::-webkit-details-marker { display:none; }
+  summary .i { transition:transform .2s; } details[open] summary .i { transform:rotate(180deg); }
+  .cmd { display:grid; gap:2px; padding:12px 0; border-top:1px solid var(--line); }
+  .cmd span { color:var(--muted); font-size:14px; }
+
+  /* final CTA */
+  .final { text-align:center; }
+  .final .box { background:linear-gradient(135deg,var(--brand),#ffb347); color:var(--onbrand); border-radius:36px; padding:44px 22px; }
+  .final h2 { margin:0 0 8px; } .final p { font-size:18px; margin-bottom:22px; opacity:.85; }
+  .final .cta { justify-content:center; margin:0; }
+  .final .btn.ghost { color:var(--onbrand); border-color:rgba(43,20,0,.35); }
+  footer { padding:26px 0 40px; color:var(--muted); font-size:13px; text-align:center; }
+
+  /* scroll reveal */
+  .rv { opacity:0; transform:translateY(22px); transition:opacity .6s ease, transform .6s ease; }
+  .rv.in { opacity:1; transform:none; }
+
+  /* sticky invite bar (phones) */
+  .dock { display:none; }
+
+  /* ---------- tablet ---------- */
+  @media (min-width:640px) {
+    .bento { grid-template-columns:repeat(3,1fr); }
+    .tile.hot { grid-column:span 3; flex-direction:row; align-items:center; gap:18px; }
+    .steps { grid-auto-columns:46%; }
   }
-  @media (prefers-reduced-motion:reduce) { html { scroll-behavior:auto; } .card { transition:none; } }
+  /* ---------- desktop ---------- */
+  @media (min-width:960px) {
+    .hero .wrap { grid-template-columns:1.05fr .95fr; padding-top:64px; padding-bottom:72px; }
+    .steps { grid-auto-flow:row; grid-template-columns:repeat(3,1fr); overflow:visible; padding:0; margin:0; }
+    .show .wrap { grid-template-columns:1fr 1fr; }
+    .show.flip .stage { order:-1; }
+    .bento { grid-template-columns:repeat(4,1fr); }
+    .tile.hot { grid-column:span 2; flex-direction:column; align-items:flex-start; }
+    .tile { transition:transform .2s, box-shadow .2s; }
+    .tile:hover, .step:hover { transform:translateY(-4px); box-shadow:var(--shadow); }
+    .step { transition:transform .2s, box-shadow .2s; }
+  }
+  /* ---------- phones: bottom invite bar ---------- */
+  @media (max-width:959px) {
+    body { padding-bottom:calc(84px + env(safe-area-inset-bottom)); }
+    .dock { position:fixed; left:0; right:0; bottom:0; z-index:40; display:flex; gap:10px; padding:10px 16px calc(10px + env(safe-area-inset-bottom));
+            background:color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter:blur(12px); border-top:1px solid var(--line); }
+    .dock .btn { flex:1; min-height:52px; }
+    .dock .btn.share { flex:0 0 56px; padding:0; }
+    .top .btn { display:none; }
+  }
+  @media (prefers-reduced-motion:reduce) {
+    html { scroll-behavior:auto; }
+    .seq { opacity:1; transform:none; animation:none; }
+    .rv { opacity:1; transform:none; transition:none; }
+    .btn, .tile, .step { transition:none; }
+  }
 </style>
 </head>
 <body>
-<div class="appbar"><img src="img/logo-256.webp" width="32" height="32" alt=""><span>PayYet</span></div>
-<div class="wrap">
-  <header class="hero">
-    <img class="logo" src="img/logo-512.webp" width="512" height="512" alt="PayYet — ใบเสร็จยิ้มถือเหรียญและโทรศัพท์สแกน QR">
-    <h1>เก็บเงินในกลุ่ม LINE<br>ไม่ต้องตามทวงทีละคน</h1>
-    <p class="lead">สั่งเก็บเงินด้วยข้อความบรรทัดเดียว เพื่อนจ่ายด้วย QR พร้อมเพย์ แนบสลิปในหน้าเดียว และบอทเตือนให้ทุกวัน</p>
-    <div class="cta">
-      <a id="add-friend" class="btn hidden" href="#">เพิ่มเพื่อน LINE</a>
-      <a class="btn secondary" href="#how">ใช้งานอย่างไร</a>
-    </div>
-  </header>
 
-  <section id="how" aria-labelledby="how-h">
-    <h2 id="how-h">เริ่มใช้งานใน 3 ขั้นตอน</h2>
-    <div class="grid">
-      <div class="card">
-        <div class="step-no" aria-hidden="true">1</div>
-        <h3>เพิ่มบอทเป็นเพื่อน</h3>
-        <p>ในแชทส่วนตัวพิมพ์ <code>พร้อมเพย์ 0812345678</code> เพื่อบอกว่าจะรับเงินที่เบอร์หรือเลขบัตรไหน</p>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-chat" viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.4A8 8 0 1 1 21 12z"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 20v-1a4 4 0 0 0-4-4H7a4 4 0 0 0-4 4v1M9.5 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM21 20v-1a4 4 0 0 0-3-3.9M16 4.2a3.5 3.5 0 0 1 0 6.6"/></symbol>
+    <symbol id="i-qr" viewBox="0 0 24 24"><path d="M4 4h6v6H4zM14 4h6v6h-6zM4 14h6v6H4zM14 14h2v2h-2zM18 14h2v2M14 18h2M18 18h2v2h-4"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 8-3 9h18c0-1-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/></symbol>
+    <symbol id="i-repeat" viewBox="0 0 24 24"><path d="M17 2l4 4-4 4M3 11V9a3 3 0 0 1 3-3h15M7 22l-4-4 4-4M21 13v2a3 3 0 0 1-3 3H3"/></symbol>
+    <symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5M12 7v5l3 2"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 6h12M9 12h12M9 18h12M4 6h.01M4 12h.01M4 18h.01"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></symbol>
+    <symbol id="i-circle-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l3 3 5-6"/></symbol>
+    <symbol id="i-zap" viewBox="0 0 24 24"><path d="M13 2L4 14h7l-1 8 9-12h-7z"/></symbol>
+    <symbol id="i-wallet" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h13v4M3 7v10a2 2 0 0 0 2 2h14a1 1 0 0 0 1-1v-9a1 1 0 0 0-1-1H5a2 2 0 0 1-2-2zM16 14h2"/></symbol>
+    <symbol id="i-share" viewBox="0 0 24 24"><path d="M4 12v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7M16 6l-4-4-4 4M12 2v13"/></symbol>
+    <symbol id="i-img" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8.5 10a1.5 1.5 0 1 0 0-3 1.5 1.5 0 0 0 0 3zM21 15l-5-5L5 21"/></symbol>
+    <symbol id="i-down" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6"/></symbol>
+    <symbol id="i-phone" viewBox="0 0 24 24"><rect x="6" y="2" width="12" height="20" rx="3"/><path d="M11 18h2"/></symbol>
+    <symbol id="i-split" viewBox="0 0 24 24"><path d="M12 3v18M3 8l4-4 4 4M13 16l4 4 4-4"/></symbol>
+  </defs>
+</svg>
+
+<header class="top">
+  <div class="wrap">
+    <div class="brand"><img src="img/logo-256.webp" width="34" height="34" alt="">PayYet</div>
+    <a class="btn line hidden" data-add href="#">เพิ่มเพื่อน</a>
+  </div>
+</header>
+
+<main>
+  <!-- HERO -->
+  <div class="hero">
+    <div class="wrap">
+      <div>
+        <span class="eyebrow"><svg class="i"><use href="#i-zap"/></svg>บอทเก็บเงินใน LINE</span>
+        <h1>เก็บเงินเพื่อน<br><em>ไม่ต้องตามทวง</em></h1>
+        <p class="lead">พิมพ์บรรทัดเดียว เพื่อนจ่ายด้วย QR แล้วบอทเตือนให้เอง</p>
+        <div class="cta">
+          <a class="btn line hidden" data-add href="#"><svg class="i"><use href="#i-chat"/></svg>เพิ่มเพื่อน LINE</a>
+          <a class="btn ghost" href="#how">ดูวิธีใช้</a>
+        </div>
+        <div class="proof">
+          <span><svg class="i"><use href="#i-circle-check"/></svg>ฟรี</span>
+          <span><svg class="i"><use href="#i-circle-check"/></svg>ไม่ต้องโอนผ่านเรา</span>
+          <span><svg class="i"><use href="#i-circle-check"/></svg>เงินเข้าพร้อมเพย์ตรง</span>
+        </div>
       </div>
-      <div class="card">
-        <div class="step-no" aria-hidden="true">2</div>
-        <h3>ชวนบอทเข้ากลุ่ม</h3>
-        <p>ให้ทุกคนในกลุ่มพิมพ์ข้อความอะไรก็ได้หนึ่งครั้ง บอทจะได้รู้จักสมาชิก (ไม่ต้องเพิ่มเพื่อนบอท)</p>
+
+      <div class="stage" aria-hidden="true">
+        <div class="phone"><div class="screen">
+          <div class="sbar"><span class="dot"><svg class="i"><use href="#i-wallet"/></svg></span>PayYet</div>
+          <div class="chat">
+            <div class="msg me seq s1">หาร ค่าข้าว 600</div>
+            <div class="bubble seq s2">
+              <h3>ค่าข้าว <span class="sub">หาร 4 คน</span></h3>
+              <div class="amt">฿150</div><div class="sub">ต่อคน · รวม ฿600</div>
+              <div class="who"><span class="av" style="background:#ef6c8a">ม</span>มาลี<span class="st done">จ่ายแล้ว</span></div>
+              <div class="who"><span class="av" style="background:#5b8def">ส</span>สมชาย<span class="st wait">รอจ่าย</span></div>
+              <div class="who"><span class="av" style="background:#34b27b">ต</span>ต้น<span class="st wait">รอจ่าย</span></div>
+              <div class="pay-btn"><svg class="i"><use href="#i-qr"/></svg>จ่ายเงิน</div>
+            </div>
+            <div class="msg seq s3" style="background:#fff">
+              <b>ต้น</b> จ่ายแล้ว ✔ เหลืออีก 1 คน
+            </div>
+          </div>
+        </div></div>
       </div>
-      <div class="card">
-        <div class="step-no" aria-hidden="true">3</div>
-        <h3>สั่งเก็บเงินในแชทส่วนตัว</h3>
-        <p>พิมพ์ <code>หาร ค่าข้าว 500</code> หรือ <code>เก็บ ค่าอาหาร 200</code> แล้วเลือกคนในหน้าที่เปิดขึ้น กดยืนยัน บอทจะโพสต์การ์ดบิลลงกลุ่มให้ทันที</p>
+    </div>
+  </div>
+
+  <!-- 3 STEPS -->
+  <section id="how">
+    <div class="wrap">
+      <div class="head rv"><div class="kicker">เริ่มง่ายๆ</div><h2>3 ขั้นตอน เสร็จใน 1 นาที</h2></div>
+      <div class="steps rv">
+        <div class="step"><span class="no">1</span><div class="badge"><svg class="i"><use href="#i-wallet"/></svg></div>
+          <h3>ตั้งพร้อมเพย์</h3><p>เพิ่มเพื่อนบอท แล้วพิมพ์ <code>พร้อมเพย์ 0812345678</code></p></div>
+        <div class="step"><span class="no">2</span><div class="badge g"><svg class="i"><use href="#i-users"/></svg></div>
+          <h3>ชวนบอทเข้ากลุ่ม</h3><p>ให้ทุกคนพิมพ์ทักทายหนึ่งครั้ง บอทจะรู้จักสมาชิก</p></div>
+        <div class="step"><span class="no">3</span><div class="badge b"><svg class="i"><use href="#i-zap"/></svg></div>
+          <h3>สั่งเก็บเงิน</h3><p>พิมพ์ <code>หาร ค่าข้าว 600</code> เลือกคน แล้วกดยืนยัน</p></div>
       </div>
     </div>
   </section>
 
-  <section id="features" aria-labelledby="feat-h">
-    <h2 id="feat-h">ทำอะไรได้บ้าง</h2>
-    <div class="grid">
-      <div class="card"><h3>สั่งเก็บเงินบรรทัดเดียว</h3><p><code>เก็บ</code> = คิดต่อคน, <code>หาร</code> = หารยอดรวมตามจำนวนคนที่เลือก ติ๊กเลือกคนจากรายชื่อสมาชิกในกลุ่ม ผลที่คำนวณแล้วแสดงให้ตรวจก่อนยืนยัน และยกเลิกได้ภายใน 10 นาที</p></div>
-      <div class="card"><h3>QR พร้อมเพย์ + แนบสลิป</h3><p>กดปุ่ม "จ่ายเงิน" บนการ์ด เห็นยอดคงเหลือ สแกนจ่าย แล้วแนบสลิปในหน้าเดียว กลุ่มไม่รกด้วยรูปสลิป</p></div>
-      <div class="card"><h3>เตือนอัตโนมัติ</h3><p>เตือนคนที่ยังไม่จ่ายเวลา 10:00 บิลกลุ่มเตือนในกลุ่ม บิลส่วนตัวเตือนแบบส่วนตัว ตั้งความถี่ได้ (ทุกวัน / ทุก 3 วัน / ทุกสัปดาห์ / ปิด) เป็นค่าเริ่มต้นในหน้า "ตั้งค่า" และปรับรายบิลได้</p></div>
-      <div class="card"><h3>บิลประจำ</h3><p>ตอนสร้างบิลเลือก "ทำซ้ำ" ทุกสัปดาห์หรือทุกเดือน ระบบสร้างและแจ้งบิลให้เองเวลา 10:00 หยุดหรือลบได้ในหน้า "บิลประจำ"</p></div>
-      <div class="card"><h3>รวมยอดเป็นบิลเดียว</h3><p>เพิ่มยอดใหม่ระหว่างที่บิลยังไม่ปิด ระบบรวมให้เป็นบิลเดิม คนที่จ่ายแล้วค้างเฉพาะส่วนที่เพิ่ม</p></div>
-      <div class="card"><h3>เช็คยอดได้ทุกเมื่อ</h3><p>พิมพ์ <code>ยอด</code> ในแชทส่วนตัวเพื่อดูว่าค้างใครและใครค้างคุณ หรือพิมพ์ในกลุ่มเพื่อดูยอดค้างของคุณเองในกลุ่มนั้น</p></div>
-      <div class="card"><h3>จัดการบิลได้ทุกเมื่อ</h3><p>พิมพ์ <code>จัดการ</code> เพื่อดูว่าใครจ่ายแล้ว รับเงินสด (จ่ายบางส่วนก็ได้) ยกหนี้ ยกเลิกรายการ หรือยกเลิกทั้งบิล และกลุ่มจะได้รับแจ้งอัตโนมัติ</p></div>
-      <div class="card"><h3>ประวัติการจ่าย</h3><p>สรุปบิลที่จ่ายแล้ว ทั้งที่คุณจ่ายและที่คุณเก็บได้ เลือกช่วงวันได้ (เริ่มต้น 30 วันล่าสุด) และส่งออกเป็นไฟล์ CSV</p></div>
-      <div class="card"><h3>เปิดแอปเก็บเงิน</h3><p>กดเมนูในแชทบอทเพื่อเปิดหน้าแอป: เก็บเงินใหม่แบบเลือกกลุ่มและคนโดยไม่ต้องพิมพ์ ดูสิ่งที่ฉันต้องจ่าย จัดการบิล ตั้งพร้อมเพย์ และอ่านวิธีใช้</p></div>
-      <div class="card"><h3>ผู้เก็บยืนยันสลิป</h3><p>สลิปถูกส่งให้ผู้เก็บเงินในแชทส่วนตัวพร้อมปุ่มยืนยัน/ปฏิเสธ เงินโอนตรงเข้าบัญชีของผู้เก็บ</p></div>
+  <!-- SHOWCASE: PAY -->
+  <section class="show alt">
+    <div class="wrap">
+      <div class="rv">
+        <div class="kicker">ฝั่งคนจ่าย</div>
+        <h2>กดจ่าย สแกน แนบสลิป</h2>
+        <p class="sub-h">ทุกอย่างอยู่ในหน้าเดียว กลุ่มไม่รกด้วยรูปสลิป</p>
+        <ul class="pill-list">
+          <li><span class="ic"><svg class="i"><use href="#i-qr"/></svg></span>QR พร้อมเพย์ตรงยอดที่ค้าง</li>
+          <li><span class="ic"><svg class="i"><use href="#i-img"/></svg></span>แนบสลิปจากมือถือ</li>
+          <li><span class="ic"><svg class="i"><use href="#i-circle-check"/></svg></span>ผู้เก็บกดยืนยันในแชทเดียว</li>
+        </ul>
+      </div>
+      <div class="stage rv" aria-hidden="true">
+        <div class="phone" style="transform:rotate(-2deg)"><div class="screen pay">
+          <div class="sbar"><span class="dot"><svg class="i"><use href="#i-wallet"/></svg></span>จ่ายเงินให้ มาลี</div>
+          <div class="pay-card">
+            <div class="sub" style="color:#6b7280">ค่าข้าว</div>
+            <div class="amt">฿150</div>
+            <svg class="qr" viewBox="0 0 21 21" shape-rendering="crispEdges"><path fill="#111" d="M0 0h7v7H0zM14 0h7v7h-7zM0 14h7v7H0z"/><path fill="#fff" d="M1 1h5v5H1zM15 1h5v5h-5zM1 15h5v5H1z"/><path fill="#111" d="M2 2h3v3H2zM16 2h3v3h-3zM2 16h3v3H2zM8 1h2v2H8zM11 3h2v2h-2zM8 5h2v2H8zM9 8h3v2H9zM13 8h2v2h-2zM16 9h4v2h-4zM8 11h2v3H8zM11 12h3v2h-3zM15 13h2v3h-2zM18 14h3v2h-3zM11 16h3v2h-3zM9 18h2v3H9zM13 19h4v2h-4zM18 18h3v3h-3zM0 8h2v3H0zM3 9h3v2H3z"/></svg>
+            <div class="upload"><svg class="i"><use href="#i-img"/></svg>แนบสลิป</div>
+          </div>
+          <div class="toast"><svg class="i" style="font-size:22px"><use href="#i-circle-check"/></svg>จ่ายครบแล้ว ขอบคุณครับ</div>
+        </div></div>
+      </div>
     </div>
   </section>
 
-  <section id="cmds" aria-labelledby="cmd-h">
-    <h2 id="cmd-h">ตัวอย่างคำสั่ง</h2>
-    <table>
-      <thead><tr><th scope="col">พิมพ์ว่า</th><th scope="col">ความหมาย</th></tr></thead>
-      <tbody>
-        <tr><td><code>เก็บ ค่าอาหาร 200</code></td><td>เก็บคนละ 200 แล้วเลือกคนจากรายชื่อ (เลือกได้หลายคน คนละ 200)</td></tr>
-        <tr><td><code>หาร ค่าเครื่องดื่ม 300</code></td><td>หาร 300 ตามจำนวนคนที่เลือก</td></tr>
-        <tr><td><code>หาร 600 ค่าข้าว ทุกคน</code></td><td>หารทุกคนในกลุ่ม ไม่ต้องเลือก</td></tr>
-        <tr><td><code>หาร 600 ยกเว้น สมชาย</code></td><td>หารทุกคนยกเว้นสมชาย</td></tr>
-        <tr><td><code>เก็บ 200 สมชาย</code></td><td>ระบุชื่อเลย ไม่ต้องเลือก (เก็บส่วนตัวจากคนเดียว)</td></tr>
-        <tr><td><code>เก็บ สมชาย 200 มาลี 300</code></td><td>กำหนดยอดรายคน</td></tr>
-        <tr><td><code>เก็บ ค่าข้าว 200 @สมชาย @มาลี</code></td><td>ในกลุ่ม: แท็กชื่อคนที่จะเก็บ สร้างบิลทันที ไม่ต้องเลือกซ้ำ</td></tr>
-        <tr><td><code>หาร ค่าข้าว 300 ยกเว้น @ต้น</code></td><td>ในกลุ่ม: เก็บทุกคนยกเว้นคนที่แท็ก</td></tr>
-        <tr><td><code>จัดการ</code></td><td>เปิดหน้าจัดการบิล: ดูว่าใครจ่ายแล้ว บันทึกเงินสด ยกหนี้ ยกเลิกรายการหรือทั้งบิล</td></tr>
-        <tr><td><code>ยอด</code></td><td>ดูยอดค้างจ่ายและยอดที่คนอื่นค้างคุณ</td></tr>
-        <tr><td><code>พร้อมเพย์</code></td><td>ตั้งหรือเปลี่ยนเลขพร้อมเพย์ที่ใช้รับเงิน (ต้องตั้งก่อนสร้างบิลแรก)</td></tr>
-      </tbody>
-    </table>
-    <p class="note">พิมพ์ เก็บ / หาร ในกลุ่มได้เลย (ต้องตั้งพร้อมเพย์ก่อน) บอทจะส่งการ์ดเลือกคนและยืนยันไปที่แชทส่วนตัว เพื่อไม่ให้กลุ่มรก</p>
+  <!-- BENTO -->
+  <section id="features">
+    <div class="wrap">
+      <div class="head rv"><div class="kicker">ทำอะไรได้บ้าง</div><h2>ครบ จบในแชท</h2></div>
+      <div class="bento rv">
+        <div class="tile hot"><span class="ic"><svg class="i"><use href="#i-split"/></svg></span>
+          <div><h3>เก็บ / หาร บรรทัดเดียว</h3><p>คิดต่อคนหรือหารรวม เลือกคน หรือแท็ก @ ในกลุ่มได้เลย</p></div></div>
+        <div class="tile"><span class="ic"><svg class="i"><use href="#i-bell"/></svg></span><h3>เตือนอัตโนมัติ</h3><p>ทุก 10:00 ปรับความถี่ได้</p></div>
+        <div class="tile"><span class="ic"><svg class="i"><use href="#i-repeat"/></svg></span><h3>บิลประจำ</h3><p>รายสัปดาห์ รายเดือน</p></div>
+        <div class="tile"><span class="ic"><svg class="i"><use href="#i-list"/></svg></span><h3>จัดการบิล</h3><p>รับเงินสด ยกหนี้ ยกเลิก</p></div>
+        <div class="tile"><span class="ic"><svg class="i"><use href="#i-history"/></svg></span><h3>ประวัติ + CSV</h3><p>ย้อนดูและส่งออกได้</p></div>
+        <div class="tile"><span class="ic"><svg class="i"><use href="#i-phone"/></svg></span><h3>เปิดแอปจากเมนู</h3><p>เก็บเงินแบบเลือก ไม่ต้องพิมพ์</p></div>
+        <div class="tile"><span class="ic"><svg class="i"><use href="#i-wallet"/></svg></span><h3>เงินเข้าตรง</h3><p>โอนเข้าพร้อมเพย์ผู้เก็บ</p></div>
+      </div>
+    </div>
   </section>
 
-  <footer>
+  <!-- COMMANDS -->
+  <section id="cmds" style="padding-top:0">
+    <div class="wrap">
+      <details class="rv">
+        <summary>ดูตัวอย่างคำสั่งทั้งหมด<svg class="i"><use href="#i-down"/></svg></summary>
+        <div class="cmd"><code>เก็บ ค่าอาหาร 200</code><span>เก็บคนละ 200 แล้วเลือกคน</span></div>
+        <div class="cmd"><code>หาร ค่าเครื่องดื่ม 300</code><span>หารยอดรวมตามคนที่เลือก</span></div>
+        <div class="cmd"><code>หาร 600 ค่าข้าว ทุกคน</code><span>หารทุกคนในกลุ่ม</span></div>
+        <div class="cmd"><code>หาร 600 ยกเว้น สมชาย</code><span>หารทุกคนยกเว้นสมชาย</span></div>
+        <div class="cmd"><code>เก็บ สมชาย 200 มาลี 300</code><span>กำหนดยอดรายคน</span></div>
+        <div class="cmd"><code>เก็บ ค่าข้าว 200 @สมชาย @มาลี</code><span>ในกลุ่ม: แท็กคน สร้างบิลทันที</span></div>
+        <div class="cmd"><code>หาร ค่าข้าว 300 ยกเว้น @ต้น</code><span>ในกลุ่ม: ทุกคนยกเว้นที่แท็ก</span></div>
+        <div class="cmd"><code>ยอด</code><span>ดูยอดค้างเป็นการ์ดรายบิล (พิมพ์ในกลุ่มได้ เห็นเฉพาะของคุณ)</span></div>
+        <div class="cmd"><code>จัดการ</code><span>เปิดหน้าจัดการบิล</span></div>
+        <div class="cmd"><code>พร้อมเพย์</code><span>ตั้งหรือเปลี่ยนเลขรับเงิน</span></div>
+        <div class="cmd"><span>สั่งเก็บในกลุ่มได้ (ต้องตั้งพร้อมเพย์ก่อน) บอทจะส่งตัวเลือกไปแชทส่วนตัวเพื่อไม่ให้กลุ่มรก</span></div>
+      </details>
+    </div>
+  </section>
+
+  <!-- FINAL INVITE -->
+  <section class="final">
+    <div class="wrap">
+      <div class="box rv">
+        <h2>ชวนเพื่อนมาใช้ด้วยกัน</h2>
+        <p>เพิ่มเพื่อนบอท แล้วลองเก็บเงินครั้งแรกวันนี้</p>
+        <div class="cta">
+          <a class="btn line hidden" data-add href="#"><svg class="i"><use href="#i-chat"/></svg>เพิ่มเพื่อน LINE</a>
+          <button class="btn ghost" type="button" data-share><svg class="i"><use href="#i-share"/></svg>ส่งต่อให้เพื่อน</button>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
     <p><strong>PayYet</strong> — ระบบไม่ได้รับหรือโอนเงินแทนใคร เงินโอนตรงเข้าพร้อมเพย์ของผู้เก็บ</p>
-    <p>เก็บข้อมูลเท่าที่จำเป็นต่อการทำงาน: ชื่อโปรไฟล์ LINE ยอดบิล และรูปสลิปที่แนบ</p>
-  </footer>
+    <p>เก็บข้อมูลเท่าที่จำเป็น: ชื่อโปรไฟล์ LINE ยอดบิล และรูปสลิปที่แนบ</p>
+  </div>
+</footer>
+
+<div class="dock">
+  <a class="btn line hidden" data-add href="#"><svg class="i"><use href="#i-chat"/></svg>เพิ่มเพื่อน LINE</a>
+  <a class="btn ghost" data-howlink href="#how">ดูวิธีใช้</a>
+  <button class="btn ghost share" type="button" data-share aria-label="ส่งต่อให้เพื่อน"><svg class="i"><use href="#i-share"/></svg></button>
 </div>
 
-<nav class="tabbar" aria-label="เมนูหลัก">
-  <a href="#how" class="active"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l3 3 5-6"/></svg>เริ่มใช้งาน</a>
-  <a href="#features"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/></svg>ฟีเจอร์</a>
-  <a href="#cmds"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 8l4 4-4 4M12 17h7"/></svg>คำสั่ง</a>
-</nav>
-
 <script>
-  // Highlight the tab of the section currently on screen.
-  (function () {
-    var links = {}; document.querySelectorAll('.tabbar a').forEach(function (a) { links[a.getAttribute('href').slice(1)] = a; });
-    if (!('IntersectionObserver' in window)) return;
-    var io = new IntersectionObserver(function (es) {
-      es.forEach(function (e) {
-        if (!e.isIntersecting) return;
-        Object.keys(links).forEach(function (k) { links[k].classList.toggle('active', k === e.target.id); });
-      });
-    }, { rootMargin: '-35% 0px -55% 0px' });
-    Object.keys(links).forEach(function (k) { var t = document.getElementById(k); if (t) io.observe(t); });
-  })();
-</script>
-<script>
-  // Show the "add friend" button only when the server knows the official account URL (App:LineOaUrl).
+  // "Add friend" buttons appear only when the server knows the official account URL (App:LineOaUrl).
+  var oaUrl = '';
   fetch('https://api.drivetodev.online/api/pay/config').then(function (r) { return r.json(); }).then(function (c) {
     if (c && /^https:\/\/(line\.me|lin\.ee)\//.test(c.oaUrl || '')) {
-      var a = document.getElementById('add-friend');
-      a.href = c.oaUrl;
-      a.classList.remove('hidden');
+      oaUrl = c.oaUrl;
+      document.querySelectorAll('[data-add]').forEach(function (a) { a.href = oaUrl; a.classList.remove('hidden'); });
+      var how = document.querySelector('[data-howlink]'); if (how) how.classList.add('hidden');
     }
   }).catch(function () {});
+
+  // Invite a friend: native share sheet when available, otherwise copy the link.
+  document.querySelectorAll('[data-share]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var url = oaUrl || location.href.split('#')[0];
+      var data = { title: 'PayYet', text: 'ลองใช้บอทเก็บเงินใน LINE ด้วยกัน', url: url };
+      if (navigator.share) { navigator.share(data).catch(function () {}); return; }
+      var done = function () { var h = b.innerHTML; b.textContent = 'คัดลอกลิงก์แล้ว'; setTimeout(function () { b.innerHTML = h; }, 1800); };
+      if (navigator.clipboard) navigator.clipboard.writeText(url).then(done).catch(function () {});
+    });
+  });
+
+  // Scroll reveal.
+  (function () {
+    var els = document.querySelectorAll('.rv');
+    if (!('IntersectionObserver' in window) || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      els.forEach(function (e) { e.classList.add('in'); }); return;
+    }
+    var io = new IntersectionObserver(function (es) {
+      es.forEach(function (e) { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
+    }, { threshold: .12 });
+    els.forEach(function (e) { io.observe(e); });
+  })();
 </script>
 </body>
 </html>
