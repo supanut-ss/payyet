@@ -102,7 +102,7 @@
 (function () {
   var API = 'https://api.drivetodev.online/'; // the API lives on its own subdomain (CORS allows this origin)
   var app = document.getElementById('app');
-  var idToken = null, billToken = null, state = null, payNotice = null;
+  var idToken = null, billToken = null, billId = null, state = null, payNotice = null;
 
   // Build DOM with textContent only: names and titles come from other users.
   function el(tag, props, children) {
@@ -148,6 +148,7 @@
     repeat: '<path d="M17 2l4 4-4 4"/><path d="M3 11V9a3 3 0 013-3h15M7 22l-4-4 4-4"/><path d="M21 13v2a3 3 0 01-3 3H3"/>',
     download: '<path d="M12 4v11M7 11l5 5 5-5M5 20h14"/>',
     bell: '<path d="M6 17V11a6 6 0 0112 0v6l2 2H4zM10 21h4"/>',
+    info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>',
     send: '<path d="M21 3L3 10l7 3 3 7z"/>',
     wallet: '<path d="M3 7h16a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><path d="M3 7l12-3v3M16 14h2"/>',
     help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 114 2c-.9.6-1.5 1.1-1.5 2M12 17h.01"/>'
@@ -180,11 +181,20 @@
   function api(path, opts) {
     opts = opts || {};
     opts.headers = Object.assign({ Authorization: 'Bearer ' + idToken }, opts.headers || {});
+    // Never leave a button spinning for ever: give up after 45 s (a bill may still have been created, say so).
+    var ctl = window.AbortController ? new AbortController() : null;
+    var timer = ctl ? setTimeout(function () { ctl.abort(); }, 45000) : null;
+    if (ctl) opts.signal = ctl.signal;
     return fetch(path, opts).then(function (r) {
+      clearTimeout(timer);
       return r.json().catch(function () { return {}; }).then(function (j) {
         if (!r.ok) { var err = new Error(j.error || ('เกิดข้อผิดพลาด (' + r.status + ')')); err.data = j; throw err; }
         return j;
       });
+    }, function (e) {
+      clearTimeout(timer);
+      if (e && e.name === 'AbortError') throw new Error('เซิร์ฟเวอร์ตอบช้าผิดปกติ ตรวจในกลุ่มหรือแชทกับบอทก่อนว่าบิลถูกสร้างแล้วหรือยัง แล้วค่อยลองใหม่');
+      throw new Error('เชื่อมต่อไม่ได้ ตรวจอินเทอร์เน็ตแล้วลองใหม่');
     });
   }
   function post(path, body) {
@@ -468,7 +478,7 @@
         var amts = box.amounts();
         if (amts && Object.keys(amts).some(function (k) { return !(amts[k] > 0); })) { out.appendChild(el('div', { class: 'msg err', text: 'ยอดของทุกคนต้องมากกว่า 0' })); return; }
         go.disabled = true; goText.textContent = 'กำลังสร้างบิล…';
-        post('api/pay/pick', { userIds: picked, dest: dest.value(), amounts: amts, repeat: repeat || null })
+        post('api/pay/pick', { userIds: picked, dest: dest.value(), amounts: amts })
           .then(renderCreated)
           .catch(function (e) {
             go.disabled = false; goText.textContent = 'สร้างบิล';
@@ -783,11 +793,51 @@
     if (!d.items.length) nodes.push(el('div', { class: 'card muted', text: 'ไม่มีรายการในช่วงวันที่นี้' }));
     else nodes.push(el('div', { class: 'card' }, d.items.map(function (i) {
       var sub = (hist.role === 'owe' ? 'ให้ ' : 'จาก ') + i.name + (i.groupName ? ' · ' + i.groupName : '') + ' · ' + i.paidAt;
-      return el('div', { class: 'li' }, [avatar(i.pictureUrl, i.name, false),
+      var row = el('div', { class: 'li' }, [avatar(i.pictureUrl, i.name, false),
         el('span', { class: 'grow' }, [el('strong', { text: i.title }), el('span', { class: 'muted block', text: sub })]),
-        el('strong', { text: money(i.amountSatang) })]);
+        el('strong', { text: money(i.amountSatang) }),
+        ibtn('info', 'ดูรายละเอียดบิล', function () { loadBillDetail(i.billId); })]);
+      return row;
     })));
     if (d.count >= 500) nodes.push(el('div', { class: 'muted small', text: 'แสดง 500 รายการล่าสุด ลดช่วงวันเพื่อดูให้ครบ' }));
+    show(nodes);
+  }
+
+  // ----- one bill in full (opened from the history list) -----
+  var STATUS_LABEL = { PAID: ['จ่ายแล้ว', 'ok'], WAIVED: ['ยกหนี้', 'grey'], SUBMITTED: ['รอตรวจสลิป', 'wait'], PENDING: ['ค้างจ่าย', 'due'], REJECTED: ['ค้างจ่าย', 'due'] };
+
+  // fromCard: opened from a bill card in chat, so "back" goes to the home screen instead of the history list
+  function loadBillDetail(id, fromCard) { return api(API + 'api/app/bill/' + id).then(function (d) { renderBillDetail(d, fromCard); }); }
+
+  function renderBillDetail(d, fromCard) {
+    bar('รายละเอียดบิล', fromCard ? toHome : function () { loadHistory(); });
+    var st = { OPEN: 'เปิดอยู่', CLOSED: 'ปิดแล้ว', CANCELLED: 'ยกเลิกแล้ว' }[d.status] || d.status;
+    var nodes = [el('div', { class: 'card' }, [
+      el('div', { class: 'li', style: 'padding-top:0' }, [avatar(d.collector.pictureUrl, d.collector.name, false),
+        el('span', { class: 'grow' }, [el('strong', { text: d.title }),
+          el('span', { class: 'muted block', text: 'เก็บโดย ' + d.collector.name + (d.groupName ? ' · ' + d.groupName : ' · ส่วนตัว') })]),
+        pill(st, d.status === 'OPEN' ? 'wait' : d.status === 'CLOSED' ? 'ok' : 'grey')]),
+      el('div', { class: 'row sub' }, [el('span', { class: 'muted', text: 'สร้างเมื่อ ' + d.createdAt }), el('span', { text: 'จ่ายแล้ว ' + money(d.paidSatang) + ' / ' + money(d.totalSatang) })])
+    ])];
+
+    nodes.push(el('div', { class: 'card' }, [el('div', { class: 'muted small', text: 'รายการในบิล' })].concat(d.charges.map(function (c) {
+      var right = c.myShareSatang != null ? 'ส่วนของฉัน ' + money(c.myShareSatang) + ' จาก ' + money(c.totalSatang) : money(c.totalSatang);
+      return el('div', { class: 'row' }, [el('span', { text: c.title }), el('span', { class: 'muted', text: right })]);
+    }))));
+
+    nodes.push(el('div', { class: 'card' }, [el('div', { class: 'muted small', text: 'คนที่ต้องจ่าย' })].concat(d.items.map(function (i) {
+      var s = STATUS_LABEL[i.status] || [i.status, 'grey'];
+      return el('div', { class: 'li' }, [avatar(i.pictureUrl, i.name, false),
+        el('span', { class: 'grow' }, [el('strong', { text: i.name + (i.isMe ? ' (ฉัน)' : '') }),
+          el('span', { class: 'muted block', text: 'จ่ายแล้ว ' + money(i.paidSatang) + ' จาก ' + money(i.amountSatang) })]),
+        pill(s[0], s[1])]);
+    }))));
+
+    if (d.payments.length) {
+      nodes.push(el('div', { class: 'card' }, [el('div', { class: 'muted small', text: 'ประวัติการจ่าย' })].concat(d.payments.map(function (p) {
+        return el('div', { class: 'row small' }, [el('span', { text: p.at + ' · ' + p.name + ' · ' + p.method }), el('strong', { text: money(p.amountSatang) })]);
+      }))));
+    }
     show(nodes);
   }
 
@@ -878,7 +928,7 @@
         return el('div', { class: 'li' }, [el('span', { class: 'grow' }, [el('strong', { text: c[0] }), el('span', { class: 'muted block', text: c[1] })])]);
       }))),
       el('div', { class: 'card' }, [el('div', { class: 'muted small', text: 'การแจ้งเตือน' }),
-        el('div', { class: 'pad', text: 'บอทเตือนคนที่ยังไม่จ่ายวันละครั้งเวลา 10:00 บิลกลุ่มเตือนในกลุ่ม บิลส่วนตัวเตือนในแชทส่วนตัว บิลที่เพิ่มทีหลังจะรวมเป็นบิลเดียวกัน' })])
+        el('div', { class: 'pad', text: 'บอทเตือนคนที่ยังไม่จ่ายวันละครั้งเวลา 10:00 บิลกลุ่มเตือนในกลุ่ม บิลส่วนตัวเตือนในแชทส่วนตัว ทุกบิลแยกกัน แต่การเตือนจะรวมเป็นการ์ดเดียวบอกว่าค้างกี่บิล' })])
     ]);
   }
 
@@ -949,7 +999,7 @@
         var amts = box.amounts();
         if (amts && Object.keys(amts).some(function (k) { return !(amts[k] > 0); })) { out.appendChild(el('div', { class: 'msg err', text: 'ยอดของทุกคนต้องมากกว่า 0' })); return; }
         go.disabled = true; goText.textContent = 'กำลังสร้างบิล…';
-        post('api/app/create', { title: title.value, amount: v, perPerson: perPerson, userIds: picked, dest: dest.value(), amounts: amts })
+        post('api/app/create', { title: title.value, amount: v, perPerson: perPerson, userIds: picked, dest: dest.value(), amounts: amts, repeat: repeat || null })
           .then(renderCreated)
           .catch(function (e) {
             go.disabled = false; goText.textContent = 'สร้างบิล';
@@ -1017,7 +1067,8 @@
     var st = q.get('liff.state') ? new URLSearchParams(q.get('liff.state').replace(/^\?/, '')) : null;
     billToken = q.get('b') || (st && st.get('b'));
     var mode = q.get('mode') || (st && st.get('mode'));
-    if (!billToken && ['pick', 'manage', 'new', 'owe', 'home', 'promptpay', 'help', 'history', 'recurring'].indexOf(mode) < 0) mode = 'home';
+    billId = q.get('id') || (st && st.get('id'));
+    if (!billToken && ['pick', 'manage', 'new', 'owe', 'home', 'promptpay', 'help', 'history', 'recurring', 'bill'].indexOf(mode) < 0) mode = 'home';
     idToken = liff.getIDToken();
     if (!idToken) { fail('ไม่พบข้อมูลผู้ใช้ ลองเปิดจากแอป LINE อีกครั้ง'); return; }
     if (mode === 'pick') return loadPick();
@@ -1025,6 +1076,7 @@
     if (mode === 'new') return loadNew();
     if (mode === 'owe') return loadOwe();
     if (mode === 'home') return loadHome();
+    if (mode === 'bill' && /^[0-9]+$/.test(billId || '')) return loadBillDetail(billId, true);
     if (mode === 'recurring') return loadRecurring();
     if (mode === 'history') return loadHistory();
     if (mode === 'promptpay') return loadPromptPay();

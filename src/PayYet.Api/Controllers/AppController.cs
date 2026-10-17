@@ -258,9 +258,68 @@ public class AppController(AppDbContext db, LineClient line, DraftService drafts
                     pictureUrl = string.IsNullOrEmpty(other?.PictureUrl) ? null : other!.PictureUrl,
                     groupName = i.Bill.Group?.Name,
                     amountSatang = i.PaidSatang,
+                    billId = i.BillId,
                     paidAt = BangkokTime.FromUtc(i.PaidAt!.Value).ToString("yyyy-MM-dd HH:mm")
                 };
             })
+        });
+    }
+
+    /// <summary>Full detail of one bill for the collector or any debtor in it: charges, people, and the payments made.</summary>
+    [HttpGet("bill/{id:long}")]
+    public async Task<IActionResult> BillDetail(long id)
+    {
+        var user = await AuthUser();
+        if (user == null) return Unauthorized(NotSignedIn);
+
+        var bill = await db.Bills
+            .Include(b => b.Creator).Include(b => b.Group)
+            .Include(b => b.Charges).ThenInclude(c => c.Shares)
+            .Include(b => b.Items).ThenInclude(i => i.Debtor)
+            .Include(b => b.Items).ThenInclude(i => i.Payments)
+            .AsSplitQuery()
+            .FirstOrDefaultAsync(b => b.Id == id);
+        var mine = bill?.Items.FirstOrDefault(i => i.DebtorId == user.Id);
+        if (bill == null || (bill.CreatorId != user.Id && mine == null))
+            return NotFound(new { error = "ไม่พบบิลนี้" });
+
+        var isCollector = bill.CreatorId == user.Id;
+        string Method(Payment p) => p.VerifiedBy == "CASH" ? "เงินสด" : p.VerifiedBy == "BANK" ? "สลิป (ตรวจกับธนาคาร)" : "สลิป";
+        return Ok(new
+        {
+            id = bill.Id,
+            title = bill.Charges.OrderBy(c => c.Id).Select(c => c.Title).FirstOrDefault() ?? bill.Title,
+            groupName = bill.Group?.Name,
+            status = bill.Status.ToString(),
+            createdAt = BangkokTime.FromUtc(bill.CreatedAt).ToString("yyyy-MM-dd HH:mm"),
+            collector = new { name = bill.Creator.Name, pictureUrl = string.IsNullOrEmpty(bill.Creator.PictureUrl) ? null : bill.Creator.PictureUrl },
+            iAmCollector = isCollector,
+            totalSatang = bill.Items.Sum(i => i.AmountSatang),
+            paidSatang = bill.Items.Sum(i => i.PaidSatang),
+            charges = bill.Charges.OrderBy(c => c.Id).Select(c => new
+            {
+                title = c.Title,
+                totalSatang = c.TotalSatang,
+                myShareSatang = mine == null ? (long?)null : c.Shares.Where(s => s.BillItemId == mine.Id).Select(s => (long?)s.AmountSatang).FirstOrDefault()
+            }),
+            items = bill.Items.OrderBy(i => i.Id).Select(i => new
+            {
+                name = i.Debtor?.Name ?? "?",
+                pictureUrl = string.IsNullOrEmpty(i.Debtor?.PictureUrl) ? null : i.Debtor!.PictureUrl,
+                amountSatang = i.AmountSatang,
+                paidSatang = i.PaidSatang,
+                status = i.Status.ToString(),
+                isMe = i.DebtorId == user.Id
+            }),
+            // the collector sees every payment, a debtor only their own
+            payments = bill.Items.Where(i => isCollector || i.DebtorId == user.Id)
+                .SelectMany(i => i.Payments.Where(p => p.Status == PaymentStatus.APPROVED).Select(p => new
+                {
+                    name = i.Debtor?.Name ?? "?",
+                    amountSatang = p.AmountSatang,
+                    method = Method(p),
+                    at = BangkokTime.FromUtc(p.CreatedAt).ToString("yyyy-MM-dd HH:mm")
+                })).OrderBy(p => p.at)
         });
     }
 

@@ -99,12 +99,34 @@ public class RecurringTests : DbTestBase
 
         var result = await _job.RunAsync();
 
-        Assert.Equal(2, result.GroupMessages);
+        // one combined card for the group; it lists every unpaid bill that reminds at all (the "off" bill stays out)
+        Assert.Equal(1, result.GroupMessages);
         Db.ChangeTracker.Clear();
         var reminded = await Db.Bills.Where(b => b.LastRemindedOn != null).Select(b => b.Id).ToListAsync();
         Assert.Contains(daily.Id, reminded);
         Assert.Contains(weekly.Id, reminded);
-        Assert.DoesNotContain(every3.Id, reminded);
+        Assert.Contains(every3.Id, reminded);
         Assert.DoesNotContain(off.Id, reminded);
+        var card = System.Text.RegularExpressions.Regex.Unescape(Handler.Calls.Last(c => c.Url.EndsWith("/message/push")).Body);
+        Assert.Contains("3 บิล", card);          // "ค้างอยู่ 3 บิล"
+    }
+
+    [Fact]
+    public async Task One_private_reminder_lists_every_bill_a_person_owes()
+    {
+        var other = AddUser("ผู้เก็บอีกคน", promptPay: "0899999999");
+        for (var n = 0; n < 2; n++)
+            await _bills.AddChargeAsync(_me.Id, null, _a.Id, "บิล" + n, SplitMode.EQUAL, new[] { (_a.Id, 10000L) });
+        await _bills.AddChargeAsync(other.Id, null, _a.Id, "ของอีกคน", SplitMode.EQUAL, new[] { (_a.Id, 5000L) });
+        foreach (var b in await Db.Bills.ToListAsync()) b.CreatedAt = DateTime.UtcNow.AddDays(-2);
+        await Db.SaveChangesAsync();
+
+        var result = await _job.RunAsync();
+
+        Assert.Equal(1, result.PrivateMessages);                       // three bills, one message
+        Assert.Equal(1, Handler.Pushes(_a.LineUserId));
+        var body = System.Text.RegularExpressions.Regex.Unescape(Handler.Calls.Last(c => c.Url.EndsWith("/message/push")).Body);
+        Assert.Contains("3 บิล", body);
+        Assert.Contains("ของอีกคน", body);
     }
 }

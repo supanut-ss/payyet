@@ -21,7 +21,7 @@ public class BillCreationService(AppDbContext db, LineClient line, BillService b
             var group = await db.Groups.FindAsync(d.GroupId);
             var r = await bills.AddChargeAsync(user.Id, d.GroupId, null, d.Title, d.Mode, d.ComputeShares());
             var pushed = group != null && await line.PushAsync(group.LineGroupId,
-                await cards.BuildForGroupAsync(r.Bill, r.Merged ? "➕ เพิ่มรายการ" : "💰 เรียกเก็บเงิน"));
+                await cards.BuildForGroupAsync(r.Bill, "💰 เรียกเก็บเงิน"));
             undo.Add(("ยกเลิกรายการนี้", r.Charge.Id));
             summary = pushed
                 ? $"✅ ส่งการ์ดเก็บเงินเข้ากลุ่ม {d.GroupName} แล้ว"
@@ -35,7 +35,7 @@ public class BillCreationService(AppDbContext db, LineClient line, BillService b
                 var debtor = await db.Users.FindAsync(share.UserId);
                 var r = await bills.AddChargeAsync(user.Id, null, share.UserId, d.Title, d.Mode, new[] { share });
                 if (debtor is { IsFriend: true })
-                    await line.PushAsync(debtor.LineUserId, await cards.BuildAsync(r.Bill, r.Merged ? "➕ เพิ่มรายการ" : "💰 เรียกเก็บเงิน", debtor.Id));
+                    await line.PushAsync(debtor.LineUserId, await cards.BuildAsync(r.Bill, "💰 เรียกเก็บเงิน", debtor.Id));
                 else
                     unreachable.Add(debtor?.Name ?? "?");
                 if (undo.Count < 3) undo.Add(($"ยกเลิก {debtor?.Name}", r.Charge.Id));

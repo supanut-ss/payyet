@@ -94,7 +94,7 @@ public static class Cards
 
     /// <param name="kind">"new", "added", "reminder" or "undone": only changes the header colour and kicker.</param>
     public static object Bill(AppSettings s, string kind, string headline, string creatorName,
-        IReadOnlyList<ChargeLine> charges, IReadOnlyList<Row> rows, string payUrl)
+        IReadOnlyList<ChargeLine> charges, IReadOnlyList<Row> rows, string payUrl, string? detailUrl = null)
     {
         var accent = kind switch { "reminder" => Theme.Red, "undone" => Theme.Grey, _ => Theme.Orange };
         var total = rows.Count;
@@ -176,7 +176,14 @@ public static class Cards
             footer = new
             {
                 type = "box", layout = "vertical", paddingAll = "12px", backgroundColor = Theme.Cream,
-                contents = new object[] { Button("จ่ายเงิน", new { type = "uri", label = "จ่ายเงิน", uri = payUrl }, "primary", accent) }
+                spacing = "sm",
+                contents = detailUrl == null
+                    ? new object[] { Button("จ่ายเงิน", new { type = "uri", label = "จ่ายเงิน", uri = payUrl }, "primary", accent) }
+                    : new object[]
+                    {
+                        Button("จ่ายเงิน", new { type = "uri", label = "จ่ายเงิน", uri = payUrl }, "primary", accent),
+                        Button("ดูรายละเอียดบิล", new { type = "uri", label = "ดูรายละเอียดบิล", uri = detailUrl }, "link", Theme.Muted)
+                    }
             }
         };
         return Msg.Flex($"{headline} · เก็บโดย {creatorName}", bubble);
@@ -231,6 +238,107 @@ public static class Cards
             }
         };
         return Msg.Flex($"ยอดค้างของ {name}", bubble);
+    }
+
+    // ───────── reminder card: every unpaid bill in one place ─────────
+
+    /// <param name="Caption">Second line of the row (collector, group...). With TotalCount &gt; 0 " · ค้าง n/m คน" is appended.</param>
+    /// <param name="WaitingSlip">Paid by slip, waiting for the collector to check: shown with a clock instead of an amount owed.</param>
+    public record OwedBill(string Title, string Caption, int UnpaidCount, int TotalCount, long RemainingSatang, string DetailUrl, bool WaitingSlip = false);
+    public record OwingPerson(string Name, int BillCount, long RemainingSatang);
+
+    /// <summary>
+    /// The reminder: how many bills are still unpaid and how much, listing each bill. In a group it also lists who owes
+    /// (<paramref name="people"/>); in a private chat it is addressed to the debtor alone (<paramref name="people"/> empty).
+    /// </summary>
+    public static object Outstanding(AppSettings s, string subtitle, IReadOnlyList<OwedBill> bills, IReadOnlyList<OwingPerson> people, string payUrl,
+        string title = "📌 ยังไม่จ่าย", string buttonLabel = "ดูและจ่ายเงิน", string peopleHeader = "ใครค้างบ้าง", string accent = Theme.Red)
+    {
+        var total = bills.Where(b => !b.WaitingSlip).Sum(b => b.RemainingSatang);
+        var body = new List<object>
+        {
+            new
+            {
+                type = "box", layout = "horizontal", alignItems = "flex-end",
+                contents = new object[]
+                {
+                    new
+                    {
+                        type = "box", layout = "vertical", flex = 1,
+                        contents = new object[]
+                        {
+                            new { type = "text", text = "ค้างอยู่", size = "xs", color = Theme.Muted },
+                            new { type = "text", text = $"{bills.Count} บิล", size = "xl", weight = "bold", color = accent }
+                        }
+                    },
+                    new
+                    {
+                        type = "box", layout = "vertical", flex = 1,
+                        contents = new object[]
+                        {
+                            new { type = "text", text = "รวมทั้งหมด", size = "xs", color = Theme.Muted, align = "end" },
+                            new { type = "text", text = "฿" + PayYet.Domain.Money.Format(total), size = "xl", weight = "bold", color = accent, align = "end" }
+                        }
+                    }
+                }
+            },
+            new { type = "separator", margin = "md", color = Theme.Line }
+        };
+
+        foreach (var b in bills.Take(10))
+            body.Add(new
+            {
+                type = "box", layout = "horizontal", margin = "md", alignItems = "center", spacing = "sm",
+                action = new { type = "uri", label = "ดูบิล", uri = b.DetailUrl },
+                contents = new object[]
+                {
+                    new
+                    {
+                        type = "box", layout = "vertical", flex = 1,
+                        contents = new object[]
+                        {
+                            new { type = "text", text = Msg.Trunc(b.Title, 40), size = "sm", weight = "bold", color = Theme.Brown, wrap = true },
+                            new { type = "text", text = Msg.Trunc(b.Caption, 40) + (b.TotalCount > 0 ? $" · ค้าง {b.UnpaidCount}/{b.TotalCount} คน" : ""), size = "xs", color = Theme.Muted, wrap = true }
+                        }
+                    },
+                    b.WaitingSlip ? Pill("⏳ รอตรวจ", Theme.Amber, Theme.AmberSoft) : Pill("฿" + PayYet.Domain.Money.Format(b.RemainingSatang), Theme.Red, Theme.RedSoft)
+                }
+            });
+        if (bills.Count > 10)
+            body.Add(new { type = "text", text = $"… และอีก {bills.Count - 10} บิล", size = "xs", color = Theme.Muted, margin = "md" });
+
+        if (people.Count > 0)
+        {
+            body.Add(new { type = "separator", margin = "md", color = Theme.Line });
+            body.Add(new { type = "text", text = peopleHeader, size = "xs", color = Theme.Muted, margin = "md" });
+            foreach (var p in people.Take(20))
+                body.Add(new
+                {
+                    type = "box", layout = "horizontal", margin = "sm", alignItems = "center", spacing = "sm",
+                    contents = new object[]
+                    {
+                        new { type = "text", text = Msg.Trunc(p.Name, 30), size = "sm", color = Theme.Brown, wrap = true, flex = 1 },
+                        new { type = "text", text = $"{p.BillCount} บิล", size = "xs", color = Theme.Muted, flex = 0 },
+                        Pill("฿" + PayYet.Domain.Money.Format(p.RemainingSatang), Theme.Red, Theme.RedSoft)
+                    }
+                });
+            if (people.Count > 20)
+                body.Add(new { type = "text", text = $"… และอีก {people.Count - 20} คน", size = "xs", color = Theme.Muted, margin = "md" });
+        }
+
+        var bubble = new
+        {
+            type = "bubble",
+            size = "mega",
+            header = new { type = "box", layout = "vertical", paddingAll = "0px", contents = new object[] { Header(LogoUrl(s), subtitle, title, accent) } },
+            body = new { type = "box", layout = "vertical", paddingAll = "16px", contents = body.ToArray() },
+            footer = new
+            {
+                type = "box", layout = "vertical", paddingAll = "12px", backgroundColor = Theme.Cream,
+                contents = new object[] { Button(buttonLabel, new { type = "uri", label = buttonLabel, uri = payUrl }, "primary", accent) }
+            }
+        };
+        return Msg.Flex($"{title} {bills.Count} บิล รวม ฿{PayYet.Domain.Money.Format(total)}", bubble);
     }
 
     // ───────── confirm card (before a bill is created) ─────────

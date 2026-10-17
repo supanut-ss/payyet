@@ -21,6 +21,11 @@ public class FakeLineHandler : HttpMessageHandler
         var url = request.RequestUri!.ToString();
         Calls.Add((url, request.Content == null ? "" : await request.Content.ReadAsStringAsync(ct)));
         var body = "{}";
+        if (url.Contains("oauth2/v2.1/verify"))     // test ID tokens are simply the LINE user id
+        {
+            var token = System.Web.HttpUtility.ParseQueryString(Calls[^1].Body)["id_token"];
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{\"sub\":\"" + token + "\",\"name\":\"Tester\"}") };
+        }
         if (url.Contains("/summary")) body = "{\"groupId\":\"C1\",\"groupName\":\"Group\",\"pictureUrl\":\"https://pic.example/group.jpg\"}";
         else if (url.Contains("/member/") || url.Contains("/profile/"))
         {
@@ -190,80 +195,31 @@ public class BillServiceTests : DbTestBase
     private static (long, long)[] Shares(AppUser a, long x, AppUser b, long y) => new[] { (a.Id, x), (b.Id, y) };
 
     [Fact]
-    public async Task Second_charge_merges_into_the_open_bill_and_totals_add_up()
+    public async Task Every_charge_is_its_own_bill_even_in_the_same_group()
     {
         var first = await _bills.AddChargeAsync(_me.Id, _group.Id, null, "ข้าว", SplitMode.EQUAL, Shares(_a, 10000, _b, 10000));
         var second = await _bills.AddChargeAsync(_me.Id, _group.Id, null, "น้ำ", SplitMode.EQUAL, Shares(_a, 5000, _b, 5000));
 
         Assert.False(first.Merged);
-        Assert.True(second.Merged);
-        Assert.Equal(first.Bill.Id, second.Bill.Id);
-        Assert.Equal(1, await Db.Bills.CountAsync());
+        Assert.False(second.Merged);
+        Assert.NotEqual(first.Bill.Id, second.Bill.Id);
+        Assert.Equal(2, await Db.Bills.CountAsync());
         Assert.Equal(2, await Db.BillCharges.CountAsync());
-        Assert.All(await Db.BillItems.ToListAsync(), i => Assert.Equal(15000, i.AmountSatang));
+        Assert.Equal(new long[] { 5000, 5000, 10000, 10000 }, (await Db.BillItems.Select(i => i.AmountSatang).ToListAsync()).OrderBy(x => x).ToArray());
+        Assert.All(await Db.Bills.ToListAsync(), b => Assert.Null(b.ScopeKey));
     }
 
     [Fact]
-    public async Task Paid_debtor_reopens_with_only_the_new_remainder()
+    public async Task A_closed_bill_does_not_affect_the_next_one()
     {
-        var r = await _bills.AddChargeAsync(_me.Id, _group.Id, null, "ข้าว", SplitMode.EQUAL, Shares(_a, 10000, _b, 10000));
-        var item = await Db.BillItems.FirstAsync(i => i.DebtorId == _a.Id);
-        item.PaidSatang = 10000;
-        item.Status = ItemStatus.PAID;
-        await Db.SaveChangesAsync();
-
-        await _bills.AddChargeAsync(_me.Id, _group.Id, null, "น้ำ", SplitMode.EQUAL, Shares(_a, 3000, _b, 3000));
-
-        await Db.Entry(item).ReloadAsync();
-        Assert.Equal(ItemStatus.PENDING, item.Status);
-        Assert.Equal(3000, item.Remaining);
-    }
-
-    [Fact]
-    public async Task New_debtor_in_later_charge_gets_an_item_and_closed_bill_starts_a_new_one()
-    {
-        var c = AddUser("ซี");
-        await _bills.AddChargeAsync(_me.Id, _group.Id, null, "ข้าว", SplitMode.EQUAL, new[] { (_a.Id, 10000L) });
-        var r = await _bills.AddChargeAsync(_me.Id, _group.Id, null, "น้ำ", SplitMode.EQUAL, new[] { (c.Id, 2000L) });
-        Assert.Equal(2, await Db.BillItems.CountAsync(i => i.BillId == r.Bill.Id));
-
+        var r = await _bills.AddChargeAsync(_me.Id, _group.Id, null, "ข้าว", SplitMode.EQUAL, new[] { (_a.Id, 10000L) });
         foreach (var i in await Db.BillItems.ToListAsync()) { i.Status = ItemStatus.PAID; i.PaidSatang = i.AmountSatang; }
         await Db.SaveChangesAsync();
         Assert.True(await _bills.CloseIfDoneAsync(r.Bill));
-        Assert.Null(r.Bill.ScopeKey);
 
         var next = await _bills.AddChargeAsync(_me.Id, _group.Id, null, "ใหม่", SplitMode.EQUAL, new[] { (_a.Id, 100L) });
-        Assert.False(next.Merged);
         Assert.NotEqual(r.Bill.Id, next.Bill.Id);
-    }
-
-    [Fact]
-    public async Task Individual_bills_are_scoped_per_debtor()
-    {
-        var x = await _bills.AddChargeAsync(_me.Id, null, _a.Id, "ยืม", SplitMode.EQUAL, new[] { (_a.Id, 5000L) });
-        var y = await _bills.AddChargeAsync(_me.Id, null, _b.Id, "ยืม", SplitMode.EQUAL, new[] { (_b.Id, 5000L) });
-        var z = await _bills.AddChargeAsync(_me.Id, null, _a.Id, "ยืมอีก", SplitMode.EQUAL, new[] { (_a.Id, 1000L) });
-        Assert.NotEqual(x.Bill.Id, y.Bill.Id);
-        Assert.Equal(x.Bill.Id, z.Bill.Id);
-        Assert.Equal(6000, (await Db.BillItems.FirstAsync(i => i.BillId == x.Bill.Id)).AmountSatang);
-    }
-
-    [Fact]
-    public async Task Undo_removes_the_charge_but_not_after_someone_paid()
-    {
-        var first = await _bills.AddChargeAsync(_me.Id, _group.Id, null, "ข้าว", SplitMode.EQUAL, Shares(_a, 10000, _b, 10000));
-        var second = await _bills.AddChargeAsync(_me.Id, _group.Id, null, "น้ำ", SplitMode.EQUAL, Shares(_a, 3000, _b, 3000));
-
-        var (ok, _, _) = await _bills.UndoChargeAsync(second.Charge.Id, _me.Id);
-        Assert.True(ok);
-        Assert.All(await Db.BillItems.ToListAsync(), i => Assert.Equal(10000, i.AmountSatang));
-
-        var other = await _bills.UndoChargeAsync(first.Charge.Id, _a.Id);   // not the creator
-        Assert.False(other.Ok);
-
-        (await Db.BillItems.FirstAsync()).PaidSatang = 100;
-        await Db.SaveChangesAsync();
-        Assert.False((await _bills.UndoChargeAsync(first.Charge.Id, _me.Id)).Ok);
+        Assert.Equal(BillStatus.OPEN, next.Bill.Status);
     }
 
     [Fact]
@@ -273,7 +229,6 @@ public class BillServiceTests : DbTestBase
         var (ok, _, bill) = await _bills.UndoChargeAsync(r.Charge.Id, _me.Id);
         Assert.True(ok);
         Assert.Equal(BillStatus.CANCELLED, bill!.Status);
-        Assert.False(await _bills.HasOpenBillAsync(_me.Id, _group.Id, null));
         Assert.Equal(0, await Db.BillItems.CountAsync());
     }
 }

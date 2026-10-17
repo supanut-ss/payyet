@@ -30,47 +30,90 @@ public class ReminderService(AppDbContext db, LineClient line, BillCardBuilder c
         var created = await RunRecurringAsync(today);
 
         var todayStart = today.ToDateTime(TimeOnly.MinValue);
-        var open = await db.Bills.Include(b => b.Group)
-            .Where(b => b.Status == BillStatus.OPEN && b.RemindEveryDays > 0 && (b.LastRemindedOn == null || b.LastRemindedOn < today))
-            .ToListAsync();
-        // due again once RemindEveryDays have passed since the last reminder (or since the day the bill was created)
-        var bills = open.Where(b => today.DayNumber - (b.LastRemindedOn ?? DateOnly.FromDateTime(BangkokTime.FromUtc(b.CreatedAt))).DayNumber >= b.RemindEveryDays).ToList();
+        var open = await db.Bills.Include(b => b.Group).Include(b => b.Creator)
+            .Where(b => b.Status == BillStatus.OPEN && b.RemindEveryDays > 0).ToListAsync();
+        var openIds = open.Select(b => b.Id).ToList();
+        var items = await db.BillItems.Include(i => i.Debtor)
+            .Where(i => openIds.Contains(i.BillId)).ToListAsync();
+        var itemsByBill = items.GroupBy(i => i.BillId).ToDictionary(g => g.Key, g => g.ToList());
+
+        // A bill is due once RemindEveryDays have passed since its last reminder (or since the day it was created),
+        // and never on the day it was created. Unpaid = not settled and not waiting for the collector to check a slip.
+        bool Unpaid(BillItem i) => !i.IsSettled && i.Status != ItemStatus.SUBMITTED;
+        bool Due(Bill b) =>
+            BangkokTime.FromUtc(b.CreatedAt) < todayStart
+            && (b.LastRemindedOn == null || b.LastRemindedOn < today)
+            && today.DayNumber - (b.LastRemindedOn ?? DateOnly.FromDateTime(BangkokTime.FromUtc(b.CreatedAt))).DayNumber >= b.RemindEveryDays
+            && itemsByBill.GetValueOrDefault(b.Id)?.Any(Unpaid) == true;
 
         int groupMsgs = 0, privateMsgs = 0;
-        foreach (var bill in bills)
+
+        // Reminders are grouped: ONE card per group listing every unpaid bill in it, ONE message per person for their private bills.
+        foreach (var g in open.Where(b => b.GroupId.HasValue && Due(b)).GroupBy(b => b.GroupId!.Value))
         {
             try
             {
-                if (BangkokTime.FromUtc(bill.CreatedAt) >= todayStart) continue;   // first reminder is after the creation day
+                var group = g.First().Group;
+                if (group is not { Active: true }) continue;
+                var all = open.Where(b => b.GroupId == g.Key && itemsByBill.GetValueOrDefault(b.Id)?.Any(Unpaid) == true).ToList();
+                if (!await ClaimAsync(all, today)) continue;
 
-                var items = await db.BillItems.Include(i => i.Debtor).Where(i => i.BillId == bill.Id).ToListAsync();
-                var unpaid = items.Where(i => !i.IsSettled && i.Status != ItemStatus.SUBMITTED).ToList();
-                if (unpaid.Count == 0) continue;
-
-                var claimed = await db.Bills
-                    .Where(b => b.Id == bill.Id && (b.LastRemindedOn == null || b.LastRemindedOn < today))
-                    .ExecuteUpdateAsync(s => s.SetProperty(b => b.LastRemindedOn, (DateOnly?)today));
-                if (claimed == 0) continue;
-
-                if (bill.GroupId.HasValue)
+                var billLines = all.OrderBy(b => b.Id).Select(b =>
                 {
-                    if (bill.Group is not { Active: true }) continue;
-                    if (await line.PushAsync(bill.Group.LineGroupId, await cards.BuildForGroupAsync(bill, "📌 ยังไม่จ่าย"))) groupMsgs++;
-                }
-                else
-                {
-                    // individual bills: each debtor gets a private reminder, but only those who are friends of the bot
-                    // (the bot cannot message anyone else; the collector chases them)
-                    foreach (var debtor in unpaid.Select(i => i.Debtor).Where(d => d is { IsFriend: true }).Distinct())
-                        if (await line.PushAsync(debtor!.LineUserId, await cards.BuildAsync(bill, "📌 ยังไม่จ่าย", debtor.Id))) privateMsgs++;
-                }
+                    var unpaid = itemsByBill[b.Id].Where(Unpaid).ToList();
+                    return new Cards.OwedBill(BillTitle(b), "เก็บโดย " + b.Creator.Name, unpaid.Count, itemsByBill[b.Id].Count(i => i.Status != ItemStatus.WAIVED), unpaid.Sum(i => i.Remaining), cards.DetailUrl(b.Id));
+                }).ToList();
+                var people = all.SelectMany(b => itemsByBill[b.Id].Where(Unpaid)).Where(i => i.Debtor != null)
+                    .GroupBy(i => i.Debtor!.Id)
+                    .Select(x => new { User = x.First().Debtor!, Count = x.Count(), Sum = x.Sum(i => i.Remaining) })
+                    .OrderByDescending(x => x.Sum).ToList();
+
+                var messages = new List<object> { Cards.Outstanding(options.Value, group.Name ?? "กลุ่ม", billLines,
+                    people.Select(p => new Cards.OwingPerson(p.User.Name, p.Count, p.Sum)).ToList(), cards.OweUrl()) };
+                if (Msg.Mention("📌 ยังไม่จ่าย", people.Select(p => p.User.LineUserId)) is { } tag) messages.Add(tag);
+                if (await line.PushAsync(group.LineGroupId, messages.ToArray())) groupMsgs++;
             }
             catch (Exception ex)
             {
-                log.LogError(ex, "Reminder failed for bill {Bill}", bill.Id);
+                log.LogError(ex, "Group reminder failed for group {Group}", g.Key);
+            }
+        }
+
+        // private bills: one message per debtor (only friends of the bot can be messaged; the collector chases the rest)
+        var privateOpen = open.Where(b => !b.GroupId.HasValue).ToList();
+        var dueDebtors = privateOpen.Where(Due).SelectMany(b => itemsByBill[b.Id].Where(Unpaid)).Select(i => i.Debtor)
+            .Where(d => d is { IsFriend: true }).GroupBy(d => d!.Id).Select(x => x.First()!).ToList();
+        foreach (var debtor in dueDebtors)
+        {
+            try
+            {
+                var mine = privateOpen.Where(b => itemsByBill[b.Id].Any(i => i.DebtorId == debtor.Id && Unpaid(i))).OrderBy(b => b.Id).ToList();
+                if (!await ClaimAsync(mine, today)) continue;
+                var lines = mine.Select(b =>
+                {
+                    var my = itemsByBill[b.Id].Where(i => i.DebtorId == debtor.Id && Unpaid(i)).ToList();
+                    return new Cards.OwedBill(BillTitle(b), "เก็บโดย " + b.Creator.Name, 0, 0, my.Sum(i => i.Remaining), cards.DetailUrl(b.Id));
+                }).ToList();
+                if (await line.PushAsync(debtor.LineUserId, Cards.Outstanding(options.Value, "ของคุณ", lines, Array.Empty<Cards.OwingPerson>(), cards.OweUrl()))) privateMsgs++;
+            }
+            catch (Exception ex)
+            {
+                log.LogError(ex, "Private reminder failed for debtor {Debtor}", debtor.Id);
             }
         }
         return new Result(groupMsgs, privateMsgs, null, created);
+    }
+
+    private static string BillTitle(Bill b) => b.Title;
+
+    /// <summary>Marks the bills as reminded today. False when another run already did (so nothing is sent twice).</summary>
+    private async Task<bool> ClaimAsync(List<Bill> bills, DateOnly today)
+    {
+        var ids = bills.Select(b => b.Id).ToList();
+        var claimed = await db.Bills
+            .Where(b => ids.Contains(b.Id) && (b.LastRemindedOn == null || b.LastRemindedOn < today))
+            .ExecuteUpdateAsync(s => s.SetProperty(b => b.LastRemindedOn, (DateOnly?)today));
+        return claimed > 0;
     }
 
     // ───────── recurring bills ─────────

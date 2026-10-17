@@ -25,6 +25,18 @@ public class ManageTests : DbTestBase
     private async Task<AddChargeResult> NewBill(params (AppUser User, long Satang)[] shares) =>
         await _bills.AddChargeAsync(_me.Id, _group.Id, null, "ค่าข้าว", SplitMode.EQUAL, shares.Select(s => (s.User.Id, s.Satang)).ToList());
 
+    /// <summary>A second charge inside an existing bill (legacy shape: new bills always hold exactly one charge).</summary>
+    private async Task<BillCharge> AddSecondCharge(AddChargeResult bill, AppUser debtor, long satang)
+    {
+        var item = await Db.BillItems.FirstAsync(i => i.BillId == bill.Bill.Id && i.DebtorId == debtor.Id);
+        var charge = new BillCharge { BillId = bill.Bill.Id, Title = "ค่าเครื่องดื่ม", TotalSatang = satang, SplitMode = SplitMode.EQUAL, CreatedAt = DateTime.UtcNow };
+        charge.Shares.Add(new ChargeShare { Charge = charge, BillItemId = item.Id, AmountSatang = satang });
+        item.AmountSatang += satang;
+        Db.BillCharges.Add(charge);
+        await Db.SaveChangesAsync();
+        return charge;
+    }
+
     private Task<BillItem> ItemOf(AddChargeResult r, AppUser u) => Db.BillItems.AsNoTracking().FirstAsync(i => i.BillId == r.Bill.Id && i.DebtorId == u.Id);
 
     // ───────── cash ─────────
@@ -139,10 +151,10 @@ public class ManageTests : DbTestBase
     public async Task Cancelling_a_charge_is_refused_when_someone_paid_more_than_the_new_amount()
     {
         var food = await NewBill((_a, 10000));
-        var drinks = await _bills.AddChargeAsync(_me.Id, _group.Id, null, "ค่าเครื่องดื่ม", SplitMode.EQUAL, new[] { (_a.Id, 3000L) });
+        var drinks = await AddSecondCharge(food, _a, 3000);                          // bills made before "one bill per charge" can hold several charges
         await _manage.MarkPaidAsync((await ItemOf(food, _a)).Id, _me.Id, 12000);   // paid 12000 of 13000
 
-        var res = await _manage.CancelChargeAsync(drinks.Charge.Id, _me.Id);        // new amount 10000 < paid 12000
+        var res = await _manage.CancelChargeAsync(drinks.Id, _me.Id);        // new amount 10000 < paid 12000
         Assert.False(res.Ok);
         Assert.Contains("ยกหนี้", res.Message);
         Assert.Equal(13000, (await ItemOf(food, _a)).AmountSatang);                  // nothing changed
@@ -158,7 +170,6 @@ public class ManageTests : DbTestBase
         var bill = await Db.Bills.FirstAsync(b => b.Id == r.Bill.Id);
         Assert.Equal(BillStatus.CANCELLED, bill.Status);
         Assert.Null(bill.ScopeKey);
-        Assert.False(await _bills.HasOpenBillAsync(_me.Id, _group.Id, null));
     }
 
     // ───────── cancel the bill / list ─────────
@@ -172,7 +183,6 @@ public class ManageTests : DbTestBase
         var res = await _manage.CancelBillAsync(r.Bill.Id, _me.Id);
         Assert.True(res.Ok);
         Assert.Contains("คืน", res.Message);
-        Assert.False(await _bills.HasOpenBillAsync(_me.Id, _group.Id, null));
         Assert.False((await _manage.CancelBillAsync(r.Bill.Id, _me.Id)).Ok);          // already cancelled
 
         var next = await NewBill((_a, 500));                                           // a new bill can start

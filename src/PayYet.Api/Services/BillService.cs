@@ -9,42 +9,27 @@ public record AddChargeResult(Bill Bill, BillCharge Charge, bool Merged);
 
 public class BillService(AppDbContext db)
 {
-    public static string ScopeKey(long creatorId, long? groupId, long? debtorId) =>
-        groupId.HasValue ? $"G:{creatorId}:{groupId}" : $"P:{creatorId}:{debtorId}";
-
-    public Task<bool> HasOpenBillAsync(long creatorId, long? groupId, long? debtorId)
-    {
-        var key = ScopeKey(creatorId, groupId, debtorId);
-        return db.Bills.AnyAsync(b => b.ScopeKey == key);
-    }
-
     /// <summary>
-    /// Adds a charge to the collector's open bill for this scope (group, or one debtor), creating the bill if none is open.
-    /// Debtor totals are recalculated: a settled debtor re-opens with only the new remainder.
+    /// Creates a new bill (one charge, one item per debtor). Every bill stands on its own: nothing is merged into an
+    /// earlier bill, so each one has its own card, its own payments and its own history. Reminders are what group them.
     /// </summary>
     public async Task<AddChargeResult> AddChargeAsync(long creatorId, long? groupId, long? singleDebtorId,
         string title, SplitMode mode, IReadOnlyList<(long UserId, long Satang)> shares)
     {
-        var key = ScopeKey(creatorId, groupId, singleDebtorId);
         await using var tx = await db.Database.BeginTransactionAsync();
 
-        var bill = await db.Bills.Include(b => b.Items).FirstOrDefaultAsync(b => b.ScopeKey == key);
-        var merged = bill != null;
-        if (bill == null)
+        var bill = new Bill
         {
-            bill = new Bill
-            {
-                Token = Token.New(),
-                CreatorId = creatorId,
-                GroupId = groupId,
-                Title = title,
-                Status = BillStatus.OPEN,
-                ScopeKey = key,
-                RemindEveryDays = (await db.Users.AsNoTracking().Where(u => u.Id == creatorId).Select(u => (int?)u.RemindEveryDays).FirstOrDefaultAsync()) ?? 1,
-                CreatedAt = DateTime.UtcNow
-            };
-            db.Bills.Add(bill);
-        }
+            Token = Token.New(),
+            CreatorId = creatorId,
+            GroupId = groupId,
+            Title = title,
+            Status = BillStatus.OPEN,
+            ScopeKey = null,            // legacy "one open bill per scope" key is no longer used
+            RemindEveryDays = (await db.Users.AsNoTracking().Where(u => u.Id == creatorId).Select(u => (int?)u.RemindEveryDays).FirstOrDefaultAsync()) ?? 1,
+            CreatedAt = DateTime.UtcNow
+        };
+        db.Bills.Add(bill);
 
         var charge = new BillCharge
         {
@@ -58,27 +43,16 @@ public class BillService(AppDbContext db)
 
         foreach (var (userId, satang) in shares)
         {
-            var item = bill.Items.FirstOrDefault(i => i.DebtorId == userId);
-            if (item == null)
-            {
-                item = new BillItem { Bill = bill, DebtorId = userId, Status = ItemStatus.PENDING };
-                bill.Items.Add(item);
-            }
-            item.AmountSatang += satang;
-            if (item.Status is ItemStatus.PAID or ItemStatus.WAIVED && item.PaidSatang < item.AmountSatang)
-            {
-                item.Status = ItemStatus.PENDING;
-                item.PaidAt = null;
-            }
+            var item = new BillItem { Bill = bill, DebtorId = userId, Status = ItemStatus.PENDING, AmountSatang = satang };
+            bill.Items.Add(item);
             charge.Shares.Add(new ChargeShare { Charge = charge, BillItem = item, AmountSatang = satang });
         }
 
         await db.SaveChangesAsync();
         await tx.CommitAsync();
-        return new AddChargeResult(bill, charge, merged);
+        return new AddChargeResult(bill, charge, false);
     }
 
-    /// <summary>Undo a charge within 10 minutes as long as nobody has paid or submitted a slip on the affected items.</summary>
     public async Task<(bool Ok, string Message, Bill? Bill)> UndoChargeAsync(long chargeId, long creatorId)
     {
         var charge = await db.BillCharges

@@ -10,6 +10,8 @@ namespace PayYet.Services;
 public class BillCardBuilder(AppDbContext db, IOptions<AppSettings> options)
 {
     public string LiffUrl(string billToken) => $"https://liff.line.me/{options.Value.Liff.Id}?b={billToken}";
+    public string OweUrl() => $"https://liff.line.me/{options.Value.Liff.Id}?mode=owe";
+    public string DetailUrl(long billId) => $"https://liff.line.me/{options.Value.Liff.Id}?mode=bill&id={billId}";
 
     /// <summary>The card for a group chat followed by a message tagging everyone on it who still has to pay.</summary>
     public async Task<object[]> BuildForGroupAsync(Bill bill, string headline)
@@ -44,6 +46,6 @@ public class BillCardBuilder(AppDbContext db, IOptions<AppSettings> options)
 
         var kind = headline.Contains("ยังไม่จ่าย") ? "reminder" : headline.Contains("ยกเลิก") ? "undone" : headline.Contains("เพิ่ม") ? "added" : "new";
         var lines = charges.Select(c => new Cards.ChargeLine(c.Title, c.TotalSatang)).ToList();
-        return Cards.Bill(options.Value, kind, headline, creator?.Name ?? "?", lines, rows, LiffUrl(bill.Token));
+        return Cards.Bill(options.Value, kind, headline, creator?.Name ?? "?", lines, rows, LiffUrl(bill.Token), DetailUrl(bill.Id));
     }
 }

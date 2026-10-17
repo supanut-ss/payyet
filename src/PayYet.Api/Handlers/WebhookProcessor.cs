@@ -230,11 +230,14 @@ public class WebhookProcessor(
     {
         var mine = await db.BillItems.Include(i => i.Bill).ThenInclude(b => b.Creator)
             .Where(i => i.DebtorId == me.Id && i.Bill.GroupId == group.Id && i.Bill.Status == BillStatus.OPEN)
-            .ToListAsync();
-        var lines = mine.Where(i => !i.IsSettled)
-            .Select(i => new Cards.OwedLine(i.Bill.Creator.Name, i.Status == ItemStatus.SUBMITTED ? RowState.Submitted : RowState.Pending, i.Remaining))
-            .ToList();
-        return Cards.MyBalance(options.Value, me.Name, lines, $"https://liff.line.me/{options.Value.Liff.Id}?mode=owe");
+            .OrderBy(i => i.BillId).ToListAsync();
+        var open = mine.Where(i => !i.IsSettled).ToList();
+        var oweUrl = $"https://liff.line.me/{options.Value.Liff.Id}?mode=owe";
+        if (open.Count == 0) return Cards.MyBalance(options.Value, me.Name, Array.Empty<Cards.OwedLine>(), oweUrl);
+
+        var lines = open.Select(i => new Cards.OwedBill(i.Bill.Title, "เก็บโดย " + i.Bill.Creator.Name, 0, 0, i.Remaining,
+            $"https://liff.line.me/{options.Value.Liff.Id}?b={i.Bill.Token}", i.Status == ItemStatus.SUBMITTED)).ToList();
+        return Cards.Outstanding(options.Value, $"ยอดค้างของ {me.Name}", lines, Array.Empty<Cards.OwingPerson>(), oweUrl, "💳 ที่ต้องจ่าย", accent: Theme.Orange);
     }
 
     // ───────────────────────── private chat ─────────────────────────
@@ -265,7 +268,7 @@ public class WebhookProcessor(
 
         if (text is "ยอด" or "ยอดค้าง")
         {
-            await line.ReplyAsync(replyToken, Msg.Text(await PrivateStatusAsync(user)));
+            await line.ReplyAsync(replyToken, await PrivateStatusAsync(user));
             return;
         }
 
@@ -366,33 +369,41 @@ public class WebhookProcessor(
 
     private Task<object> ConfirmCardAsync(AppUser user, Draft d) => draftCards.BuildAsync(user, d);
 
-    private async Task<string> PrivateStatusAsync(AppUser user)
+    /// <summary>"ยอด" in the private chat: what I owe, and what others owe me, each as a bill-by-bill card.</summary>
+    private async Task<object[]> PrivateStatusAsync(AppUser user)
     {
-        var sb = new System.Text.StringBuilder();
+        var liff = $"https://liff.line.me/{options.Value.Liff.Id}";
+        var messages = new List<object>();
 
-        var owe = await db.BillItems.Include(i => i.Bill).ThenInclude(b => b.Creator)
-            .Where(i => i.DebtorId == user.Id && i.Bill.Status == BillStatus.OPEN).ToListAsync();
+        var owe = await db.BillItems.Include(i => i.Bill).ThenInclude(b => b.Creator).Include(i => i.Bill).ThenInclude(b => b.Group)
+            .Where(i => i.DebtorId == user.Id && i.Bill.Status == BillStatus.OPEN).OrderBy(i => i.BillId).ToListAsync();
         owe = owe.Where(i => !i.IsSettled).ToList();
-        sb.AppendLine("💳 ที่คุณต้องจ่าย");
-        if (owe.Count == 0) sb.AppendLine("  – ไม่มี");
-        foreach (var g in owe.GroupBy(i => i.Bill.Creator.Name))
-            sb.AppendLine($"  • {g.Key}: ฿{Money.Format(g.Sum(i => i.Remaining))}");
-
-        var mine = await db.Bills.Include(b => b.Group).Where(b => b.CreatorId == user.Id && b.Status == BillStatus.OPEN).ToListAsync();
-        sb.AppendLine().AppendLine("📥 ที่คนอื่นค้างคุณ");
-        var any = false;
-        foreach (var bill in mine)
+        if (owe.Count > 0)
         {
-            var items = await db.BillItems.Include(i => i.Debtor).Where(i => i.BillId == bill.Id).ToListAsync();
-            var unpaid = items.Where(i => !i.IsSettled).ToList();
-            if (unpaid.Count == 0) continue;
-            any = true;
-            sb.AppendLine($"  {(bill.Group?.Name != null ? "กลุ่ม " + bill.Group.Name : "ส่วนตัว")}:");
-            foreach (var i in unpaid)
-                sb.AppendLine($"   – {i.Debtor?.Name}: ฿{Money.Format(i.Remaining)}{(i.Status == ItemStatus.SUBMITTED ? " ⏳" : "")}");
+            var lines = owe.Select(i => new Cards.OwedBill(i.Bill.Title, "เก็บโดย " + i.Bill.Creator.Name + (i.Bill.Group?.Name != null ? " · " + i.Bill.Group.Name : ""), 0, 0,
+                i.Remaining, $"{liff}?b={i.Bill.Token}", i.Status == ItemStatus.SUBMITTED)).ToList();
+            messages.Add(Cards.Outstanding(options.Value, "ยอดของคุณ", lines, Array.Empty<Cards.OwingPerson>(), $"{liff}?mode=owe", "💳 ที่ต้องจ่าย", accent: Theme.Orange));
         }
-        if (!any) sb.AppendLine("  – ไม่มี");
-        return sb.ToString().TrimEnd();
+
+        var mine = await db.Bills.Include(b => b.Group).Include(b => b.Items).ThenInclude(i => i.Debtor)
+            .Where(b => b.CreatorId == user.Id && b.Status == BillStatus.OPEN).OrderBy(b => b.Id).ToListAsync();
+        var collecting = mine.Where(b => b.Items.Any(i => !i.IsSettled)).ToList();
+        if (collecting.Count > 0)
+        {
+            var lines = collecting.Select(b =>
+            {
+                var unpaid = b.Items.Where(i => !i.IsSettled).ToList();
+                return new Cards.OwedBill(b.Title, b.Group?.Name != null ? "กลุ่ม " + b.Group.Name : "ส่วนตัว", unpaid.Count, b.Items.Count(i => i.Status != ItemStatus.WAIVED),
+                    unpaid.Where(i => i.Status != ItemStatus.SUBMITTED).Sum(i => i.Remaining), $"{liff}?mode=bill&id={b.Id}", unpaid.All(i => i.Status == ItemStatus.SUBMITTED));
+            }).ToList();
+            var people = collecting.SelectMany(b => b.Items.Where(i => !i.IsSettled && i.Status != ItemStatus.SUBMITTED && i.Debtor != null))
+                .GroupBy(i => i.DebtorId).Select(g => new Cards.OwingPerson(g.First().Debtor!.Name, g.Count(), g.Sum(i => i.Remaining)))
+                .OrderByDescending(p => p.RemainingSatang).ToList();
+            messages.Add(Cards.Outstanding(options.Value, "บิลที่คุณเก็บ", lines, people, $"{liff}?mode=manage", "📥 คนอื่นค้างคุณ", "จัดการบิล", "ใครค้างบ้าง", Theme.Green));
+        }
+
+        if (messages.Count == 0) messages.Add(Msg.Text("ตอนนี้ไม่มียอดค้าง 🎉 ไม่มีบิลที่คุณต้องจ่าย และไม่มีคนค้างคุณ"));
+        return messages.Take(5).ToArray();
     }
 
     // ───────────────────────── postbacks ─────────────────────────

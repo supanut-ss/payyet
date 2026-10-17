@@ -74,13 +74,14 @@ public class CreationTests : DbTestBase
     }
 
     [Fact]
-    public async Task Second_bill_in_the_same_group_merges_into_the_open_one()
+    public async Task Second_bill_in_the_same_group_is_a_separate_bill()
     {
         await _creation.CreateAsync(_me, GroupDraft(10000));
         await _creation.CreateAsync(_me, GroupDraft(5000));
 
-        Assert.Equal(1, await Db.Bills.CountAsync());
+        Assert.Equal(2, await Db.Bills.CountAsync());
         Assert.Equal(2, await Db.BillCharges.CountAsync());
-        Assert.All(await Db.BillItems.ToListAsync(), i => Assert.Equal(15000, i.AmountSatang));
+        Assert.Equal(1, await Db.Bills.CountAsync(b => b.Charges.Count == 1 && b.Items.All(i => i.AmountSatang == 10000)));
+        Assert.Equal(1, await Db.Bills.CountAsync(b => b.Charges.Count == 1 && b.Items.All(i => i.AmountSatang == 5000)));
     }
 }

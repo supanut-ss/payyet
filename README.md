@@ -7,7 +7,7 @@ Design: [docs/DESIGN.md](docs/DESIGN.md) · Thai: [docs/DESIGN.th.md](docs/DESIG
 
 - Learns group members passively (works without a verified OA); no manual registration.
 - Collector creates bills **in the private chat** with one line. **`เก็บ` = the amount is for one person** (each person picked pays it), **`หาร` = the amount is a total split among the people picked**: `เก็บ ค่าอาหาร 200`, `หาร ค่าเครื่องดื่ม 300`. Without names the bot opens a LIFF page where the collector ticks people from the group members. Shortcuts: `หาร 600 ค่าข้าว ทุกคน`, `หาร 600 ยกเว้น สมชาย`, `เก็บ 200 สมชาย` (named, no picker; the person must be a member of one of your groups), `เก็บ สมชาย 200 มาลี 300` (custom amounts). One confirm tap, 10-minute undo.
-- Extra charges for the same group/debtor merge into the open bill.
+- Every bill is separate; the daily reminder groups them into one card showing how many bills are unpaid.
 - Group bills: one card in the group; individual bills: private message.
 - Payment on a LIFF page: PromptPay QR (remaining amount) + slip upload. The collector approves/rejects in the private chat.
 - **App screens (no typing needed)**, all in one LIFF page, opened from the bot or a rich-menu button: `?mode=home` (hub with PromptPay setting), `?mode=new` (new-bill form: group → title, amount, split/each, people, destination → one tap creates the bill, 10-minute undo), `?mode=manage` (below) and `?mode=owe` (what I still have to pay, with a pay button). Opening the page with no parameters shows the hub. Typed commands keep working as shortcuts.

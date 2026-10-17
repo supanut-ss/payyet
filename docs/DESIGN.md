@@ -91,25 +91,19 @@ The collector types one line (`เก็บ` or `เก็บเงิน`). Wit
   กลุ่ม: เพื่อนสนิท (รู้จักแล้ว 5/6 คน)
   [ยืนยัน]  [ยกเลิก]
   ```
-  The card says "เพิ่มเข้าบิลเดิม" when merging (§4.2.1) and shows coverage only when below 100 % (§4.1; with an unverified OA, offers "ให้บอทเรียกทุกคนพิมพ์ทักทาย").
+  The card shows coverage only when below 100 % (§4.1; with an unverified OA, offers "ให้บอทเรียกทุกคนพิมพ์ทักทาย").
 - **Undo**: after confirming, the collector gets `[ยกเลิกรายการนี้]` for 10 minutes (removes the charge if nobody has paid it yet).
 
 On confirm, the bot posts **one Flex card to the group** (items, each person's remaining amount, "จ่ายเงิน" button that opens the LIFF pay page, §4.4). **No private push** — group bills are announced and reminded in the group only.
 
-### 4.2.1 Adding more charges → one bill
-- Each collector has **at most one OPEN bill per scope**: (collector + group) or (collector + debtor). Enforced by `bills.scope_key`.
-- When the collector adds a charge (`เก็บเงิน` → same group/debtor) and an OPEN bill exists, the charge is **appended to that bill** instead of creating a new one (the confirm step says "เพิ่มเข้าบิลเดิม").
-- Per-debtor total = sum of that debtor's shares across all charges; `remaining = total − paid`.
-  - Debtor already `PAID` → item reopens as `PENDING` with only the new remainder.
-  - New debtor in a later charge → new `bill_items` row.
-  - Due date stays as set on the bill unless the collector changes it.
-- The bot posts an updated card to the group ("เพิ่มรายการ: …, ยอดคงเหลือใหม่") right away.
-- If the previous bill is already `CLOSED`, the next charge starts a new bill.
+### 4.2.1 Every bill stands alone, reminders group them
+- Each time a collector bills a group or a person a **new bill** is created (one charge, one `bill_items` row per debtor). Nothing is merged into an earlier bill, so each bill has its own card, payments, history and undo. `bills.scope_key` is no longer used (older merged bills keep working).
+- **Reminders are what group bills.** The daily job sends ONE card per group listing every unpaid bill ("ค้างอยู่ N บิล · รวม ฿X", each bill with collector and amount, and who owes N bills), and ONE private message per debtor for their private bills. A bill reminds on its own schedule (`remind_every_days`); when any bill of a group is due, all unpaid bills of the group are listed and marked as reminded.
 
 ### 4.3 Create an individual bill (1:1 chat)
 - Type the debtor's name in quick entry (`เก็บ 200 สมชาย`), matched against people who share a group with the collector, **or**
 - Bot generates an invite code / link (`https://line.me/R/oaMessage/@bot/?PAY-8F3K2`) that the collector sends to anyone; when the debtor opens it and sends the code, the bill is bound to them.
-- Individual bills are announced and reminded **privately** to the debtor (requires `is_friend = 1`; if not, the collector is told the debtor must add the bot). Extra charges merge into the same open bill (§4.2.1).
+- Individual bills are announced and reminded **privately** to the debtor (requires `is_friend = 1`; if not, the collector is told the debtor must add the bot). Each charge is its own bill; the reminder lists everything the debtor owes (§4.2.1).
 
 ### 4.4 Pay
 Payment happens on a **LIFF page**, not in the chat, so the group stays clean (no QR, no slip photos posted).
@@ -375,6 +369,6 @@ tests/PayYet.Tests/
 
 ## 11. Roadmap
 
-1. **MVP**: auto-register group members, create group & individual bills (equal split), merge extra charges into the open bill, LIFF pay page (PromptPay QR + slip upload), manual slip approval, `ยอด`, daily 10:00 reminders (group digest / private).
+1. **MVP**: auto-register group members, create group & individual bills (equal split), LIFF pay page (PromptPay QR + slip upload), manual slip approval, `ยอด`, daily 10:00 reminders (group digest / private).
 2. Custom split, invite codes, rich menu, "ทวงตอนนี้".
 3. Auto slip verification, LIFF bill dashboard / history, export (CSV).
