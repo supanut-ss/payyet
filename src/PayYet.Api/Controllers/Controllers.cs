@@ -229,10 +229,11 @@ public class PayController(AppDbContext db, LineClient line, PaymentService paym
 /// <summary>Collector-only endpoints behind the "manage bills" LIFF page. Identity always comes from a verified LINE ID token.</summary>
 [ApiController]
 [Route("api/manage")]
-public class ManageController(AppDbContext db, LineClient line, BillManageService manage, BillCardBuilder cards) : ControllerBase
+public class ManageController(AppDbContext db, LineClient line, BillManageService manage, BillCardBuilder cards, PaymentService payments, IOptions<AppSettings> options) : ControllerBase
 {
     public record PaidRequest(long ItemId, decimal? Amount);
     public record IdRequest(long Id);
+    public record EditChargeRequest(long Id, string? Title, Dictionary<long, decimal>? Amounts);
 
     [HttpGet]
     public async Task<IActionResult> List()
@@ -249,7 +250,11 @@ public class ManageController(AppDbContext db, LineClient line, BillManageServic
             createdAt = b.CreatedAt,
             totalSatang = b.Items.Sum(i => i.AmountSatang),
             paidSatang = b.Items.Sum(i => i.PaidSatang),
-            charges = b.Charges.OrderBy(c => c.Id).Select(c => new { id = c.Id, title = c.Title, totalSatang = c.TotalSatang }),
+            charges = b.Charges.OrderBy(c => c.Id).Select(c => new
+            {
+                id = c.Id, title = c.Title, totalSatang = c.TotalSatang,
+                shares = c.Shares.Select(s => new { itemId = s.BillItemId, amountSatang = s.AmountSatang })
+            }),
             items = b.Items.OrderBy(i => i.Id).Select(i => new
             {
                 id = i.Id,
@@ -258,7 +263,14 @@ public class ManageController(AppDbContext db, LineClient line, BillManageServic
                 amountSatang = i.AmountSatang,
                 paidSatang = i.PaidSatang,
                 remainingSatang = i.Remaining,
-                status = i.Status.ToString()
+                status = i.Status.ToString(),
+                slip = i.Payments.Where(p => p.Status == PaymentStatus.SUBMITTED).OrderByDescending(p => p.Id).Select(p => new
+                {
+                    id = p.Id,
+                    amountSatang = p.AmountSatang,
+                    imageUrl = $"{options.Value.App.PublicBaseUrl.TrimEnd('/')}/media/{p.MediaToken}",
+                    bankVerified = p.VerifiedBy == "BANK"
+                }).FirstOrDefault()
             })
         }));
     }
@@ -283,6 +295,33 @@ public class ManageController(AppDbContext db, LineClient line, BillManageServic
         // Only the final "everyone paid" notice goes out right away.
         if (!r.Bill.GroupId.HasValue || done) await Announce(r.Bill, text, item);
         return Ok(new { message = r.Message });
+    }
+
+    /// <summary>Rename a charge and/or change what each person owes for it.</summary>
+    [HttpPost("edit-charge")]
+    public async Task<IActionResult> EditCharge([FromBody] EditChargeRequest req)
+    {
+        var user = await AuthUser();
+        if (user == null) return Unauthorized(new { error = "เข้าสู่ระบบไม่สำเร็จ ลองเปิดจากแอป LINE อีกครั้ง" });
+        var shares = req.Amounts?.ToDictionary(kv => kv.Key, kv => Money.ToSatang(kv.Value));
+        var r = await manage.EditChargeAsync(req.Id, user.Id, req.Title, shares);
+        return r.Ok ? Ok(new { message = r.Message }) : BadRequest(new { error = r.Message });
+    }
+
+    /// <summary>Approve or reject a waiting slip from the manage page (same action as the buttons on the slip card).</summary>
+    [HttpPost("approve-slip")]
+    public Task<IActionResult> ApproveSlip([FromBody] IdRequest req) => ReviewSlip(req.Id, approve: true);
+
+    [HttpPost("reject-slip")]
+    public Task<IActionResult> RejectSlip([FromBody] IdRequest req) => ReviewSlip(req.Id, approve: false);
+
+    private async Task<IActionResult> ReviewSlip(long paymentId, bool approve)
+    {
+        var user = await AuthUser();
+        if (user == null) return Unauthorized(new { error = "เข้าสู่ระบบไม่สำเร็จ ลองเปิดจากแอป LINE อีกครั้ง" });
+        var message = approve ? await payments.ApproveAsync(paymentId, user.LineUserId) : await payments.RejectAsync(paymentId, user.LineUserId);
+        var ok = message.StartsWith("ยืนยันแล้ว", StringComparison.Ordinal) || message.StartsWith("ปฏิเสธแล้ว", StringComparison.Ordinal);
+        return ok ? Ok(new { message }) : BadRequest(new { error = message });
     }
 
     [HttpPost("waive")]

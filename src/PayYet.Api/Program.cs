@@ -32,6 +32,7 @@ builder.Services.AddScoped<BillService>();
 builder.Services.AddScoped<BillManageService>();
 builder.Services.AddScoped<BillCreationService>();
 builder.Services.AddScoped<DraftService>();
+builder.Services.AddHttpClient<SlipVerifier>(c => c.Timeout = TimeSpan.FromSeconds(20));
 builder.Services.AddScoped<PaymentService>();
 builder.Services.AddScoped<BillCardBuilder>();
 builder.Services.AddScoped<DraftCardBuilder>();

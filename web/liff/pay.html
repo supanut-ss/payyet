@@ -102,7 +102,7 @@
 (function () {
   var API = 'https://api.drivetodev.online/'; // the API lives on its own subdomain (CORS allows this origin)
   var app = document.getElementById('app');
-  var idToken = null, billToken = null, state = null;
+  var idToken = null, billToken = null, state = null, payNotice = null;
 
   // Build DOM with textContent only: names and titles come from other users.
   function el(tag, props, children) {
@@ -144,6 +144,7 @@
     user: '<circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.5-6.5 8-6.5s8 2.5 8 6.5"/>',
     home: '<path d="M4 11l8-7 8 7v9H4z"/>',
     swap: '<path d="M7 7h12l-3-3M17 17H5l3 3"/>',
+    history: '<path d="M3 12a9 9 0 109-9 9 9 0 00-6.4 2.6L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/>',
     send: '<path d="M21 3L3 10l7 3 3 7z"/>',
     wallet: '<path d="M3 7h16a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><path d="M3 7l12-3v3M16 14h2"/>',
     help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 114 2c-.9.6-1.5 1.1-1.5 2M12 17h.01"/>'
@@ -226,7 +227,10 @@
           el('img', { class: 'qr', src: d.qr, alt: 'PromptPay QR' })
         ]));
       }
-      if (d.itemStatus === 'SUBMITTED') nodes.push(el('div', { class: 'msg ok', text: '⏳ ส่งสลิปแล้ว รอผู้เก็บตรวจสอบ' }));
+      if (d.itemStatus === 'SUBMITTED') {
+        nodes.push(el('div', { class: 'msg ok', text: '⏳ ส่งสลิปแล้ว รอผู้เก็บตรวจสอบ' }));
+        if (payNotice) nodes.push(el('div', { class: 'msg err', text: payNotice }));
+      }
       else nodes.push(uploadCard(d));
     }
 
@@ -264,7 +268,7 @@
         fd.append('amount', amount.value);
         fd.append('file', blob, 'slip.jpg');
         return api(API + 'api/pay/slip', { method: 'POST', body: fd });
-      }).then(function () { return load(); })
+      }).then(function (r) { payNotice = r && r.message && r.message.indexOf('⚠️') === 0 ? r.message : null; return load(); })
         .catch(function (e) {
           btn.disabled = false; btnText.textContent = 'ส่งสลิป';
           out.appendChild(el('div', { class: 'msg err', text: e.message }));
@@ -482,6 +486,8 @@
   // ───────── manage: who has paid, cash, waive, cancel a charge or a whole bill ─────────
   var manageNotice = null;
 
+  function openManage() { manageSel = null; return loadManage(); }
+
   function loadManage() {
     return api(API + 'api/manage').then(renderManage);
   }
@@ -492,16 +498,39 @@
       .catch(function (e) { manageNotice = { ok: false, text: e.message }; return loadManage(); });
   }
 
+  var manageSel = null;   // id of the bill whose details are open (null = the list of bills)
+
   function renderManage(bills) {
-    bar('จัดการบิล', toHome);
+    var open = manageSel == null ? null : bills.filter(function (x) { return x.id === manageSel; })[0];
+    if (!open) manageSel = null;
+    bar(open ? 'รายละเอียดบิล' : 'จัดการบิล', open ? function () { manageSel = null; renderManage(bills); } : toHome);
+
     var nodes = [];
     if (manageNotice) {
       nodes.push(el('div', { class: 'msg ' + (manageNotice.ok ? 'ok' : 'err'), text: manageNotice.text }));
       manageNotice = null;
     }
+    if (open) { nodes.push(manageBill(open)); show(nodes); return; }
+
     if (!bills.length) nodes.push(el('div', { class: 'card muted', text: 'ตอนนี้ไม่มีบิลที่ยังเปิดอยู่ สั่งเก็บเงินใหม่ได้จากหน้าหลัก' }));
-    bills.forEach(function (b) { nodes.push(manageBill(b)); });
+    else nodes.push(el('div', { class: 'card' }, bills.map(function (b) { return billRow(b, bills); })));
     show(nodes);
+  }
+
+  // One line per bill; tap to see who has paid and to manage it.
+  function billRow(b, bills) {
+    var done = b.items.filter(function (i) { return i.status === 'PAID' || i.status === 'WAIVED'; }).length;
+    var left = b.totalSatang - b.paidSatang;
+    var pending = b.items.some(function (i) { return i.status === 'SUBMITTED'; });
+    var tag = pending ? pill('รอตรวจสลิป', 'wait') : left > 0 ? pill(money(left), 'due') : pill('ครบแล้ว', 'ok');
+    var row = el('button', { class: 'li', type: 'button' }, [
+      el('span', { class: 'tint' }, [icon(b.groupName ? 'users' : 'user')]),
+      el('span', { class: 'grow' }, [el('strong', { text: b.title }),
+        el('span', { class: 'muted block', text: (b.groupName ? b.groupName : 'ส่วนตัว') + ' · จ่ายแล้ว ' + done + '/' + b.items.length + ' คน' })]),
+      tag, chev()
+    ]);
+    row.addEventListener('click', function () { manageSel = b.id; renderManage(bills); });
+    return row;
   }
 
   function manageBill(b) {
@@ -517,24 +546,61 @@
       ])
     ];
 
-    if (b.charges.length > 1) {
-      var chargeBox = el('div', { class: 'sub' });
-      b.charges.forEach(function (c) {
-        var del = ibtn('x', 'ยกเลิกรายการ', function () {
-          if (!window.confirm('ยกเลิกรายการ "' + c.title + '" (฿' + baht(c.totalSatang) + ') ?\nยอดของทุกคนจะลดลงตามส่วนแบ่งของรายการนี้')) return;
-          manageAction('cancel-charge', { id: c.id }, 'ยกเลิกรายการแล้ว');
-        });
-        chargeBox.appendChild(el('div', { class: 'row small' }, [el('span', { text: c.title + '  ฿' + baht(c.totalSatang) }), del]));
-      });
-      parts.push(chargeBox);
-    } else if (b.charges.length === 1) {
-      // A single charge is the whole bill: the trash icon above already covers it.
-    }
+    var chargeBox = el('div', { class: 'sub' });
+    b.charges.forEach(function (c) { chargeBox.appendChild(chargeRow(b, c)); });
+    parts.push(chargeBox);
 
     var people = el('div', { class: 'sub' });
     b.items.forEach(function (i) { people.appendChild(manageItem(i)); });
     parts.push(people);
     return el('div', { class: 'card' }, parts);
+  }
+
+  // One charge of the bill: rename it, change each person's share, or cancel it.
+  function chargeRow(b, c) {
+    var holder = el('div');
+    var head = el('div', { class: 'row small' });
+    function view() {
+      head.replaceChildren(el('span', { text: c.title + '  ฿' + baht(c.totalSatang) }));
+      var tools = el('span', { class: 'chips', style: 'flex-wrap:nowrap;gap:0' });
+      tools.appendChild(ibtn('edit', 'แก้ไขรายการ', edit));
+      if (b.charges.length > 1) {
+        tools.appendChild(ibtn('x', 'ยกเลิกรายการ', function () {
+          if (!window.confirm('ยกเลิกรายการ "' + c.title + '" (฿' + baht(c.totalSatang) + ') ?\nยอดของทุกคนจะลดลงตามส่วนแบ่งของรายการนี้')) return;
+          manageAction('cancel-charge', { id: c.id }, 'ยกเลิกรายการแล้ว');
+        }));
+      }
+      head.appendChild(tools);
+    }
+    function edit() {
+      holder.replaceChildren();
+      var title = el('input', { type: 'text', class: 'inp', value: c.title, maxlength: '80', 'aria-label': 'ชื่อรายการ' });
+      var fields = {};
+      var rows = c.shares.map(function (sh) {
+        var who = b.items.filter(function (i) { return i.id === sh.itemId; })[0];
+        var inp = el('input', { type: 'number', class: 'inp amt', inputmode: 'decimal', step: '0.01', min: '0.01', value: (sh.amountSatang / 100).toFixed(2), 'aria-label': 'ยอดของ ' + (who ? who.name : '') });
+        fields[sh.itemId] = { input: inp, original: sh.amountSatang };
+        return el('div', { class: 'li' }, [avatar(who && who.pictureUrl, who ? who.name : '?', false), el('span', { class: 'grow', text: who ? who.name : '?' }), inp]);
+      });
+      var out = el('div');
+      var save = ibtn('check', 'บันทึก', function () {
+        var amounts = {}, changed = false;
+        for (var k in fields) {
+          var v = parseFloat(fields[k].input.value);
+          if (!(v > 0)) { out.replaceChildren(el('div', { class: 'msg err', text: 'ยอดของทุกคนต้องมากกว่า 0' })); return; }
+          if (Math.round(v * 100) !== fields[k].original) { amounts[k] = v; changed = true; }
+        }
+        var newTitle = title.value.trim();
+        if (!changed && newTitle === c.title) { view(); holder.replaceChildren(); return; }
+        save.disabled = true;
+        manageAction('edit-charge', { id: c.id, title: newTitle === c.title ? null : newTitle, amounts: changed ? amounts : null }, 'แก้ไขแล้ว');
+      }, 'ok');
+      var cancel = ibtn('x', 'ยกเลิกการแก้ไข', function () { holder.replaceChildren(); });
+      holder.appendChild(el('div', { class: 'card', style: 'margin:6px 0' }, [title, el('div', { class: 'pad' }), el('div', {}, rows),
+        el('div', { class: 'row' }, [el('span', { class: 'muted small', text: 'แก้ยอดรายคนได้ ยอดรวมจะคำนวณใหม่' }), el('span', {}, [cancel, save])]), out]));
+    }
+    view();
+    return el('div', {}, [head, holder]);
   }
 
   function manageItem(i) {
@@ -548,7 +614,21 @@
     var wrap = el('div', {}, [line]);
 
     if (i.status === 'SUBMITTED') {
-      wrap.appendChild(el('div', { class: 'muted small', text: 'มีสลิปรอตรวจ กลับไปกดยืนยันหรือปฏิเสธในแชทกับบอทก่อน' }));
+      var sl = i.slip;
+      if (sl) {
+        var view = el('a', { class: 'chip', href: sl.imageUrl, target: '_blank', rel: 'noopener' }, [icon('camera'), el('span', { text: 'ดูสลิป ' + money(sl.amountSatang) })]);
+        line.appendChild(ibtn('check', 'ยืนยันรับเงิน', function () {
+          if (!window.confirm('ยืนยันว่าได้รับเงิน ' + money(sl.amountSatang) + ' จาก ' + i.name + ' แล้ว?')) return;
+          manageAction('approve-slip', { id: sl.id }, 'ยืนยันแล้ว');
+        }, 'ok'));
+        line.appendChild(ibtn('x', 'ปฏิเสธสลิป', function () {
+          if (!window.confirm('ปฏิเสธสลิปของ ' + i.name + ' ?\nผู้จ่ายจะถูกแจ้งให้ส่งสลิปใหม่')) return;
+          manageAction('reject-slip', { id: sl.id }, 'ปฏิเสธแล้ว');
+        }, 'warn'));
+        wrap.appendChild(el('div', { class: 'chips pad', style: 'margin-left:46px' }, [view].concat(sl.bankVerified ? [pill('ตรวจกับธนาคารแล้ว', 'ok')] : [])));
+      } else {
+        wrap.appendChild(el('div', { class: 'muted small', text: 'มีสลิปรอตรวจ' }));
+      }
     } else if (i.status !== 'PAID' && i.status !== 'WAIVED') {
       var form = el('div', { class: 'cashform' });
       form.style.display = 'none';
@@ -619,11 +699,61 @@
 
     nodes.push(el('div', { class: 'card' }, [
       homeRow('plus', 'เก็บเงินใหม่', 'สร้างบิลในกลุ่ม', true, function () { loadNew(); }),
-      homeRow('list', 'จัดการบิล', d.openBills > 0 ? d.openBills + ' บิล · ค้างรับ ' + money(d.receivableSatang) : 'ยังไม่มีบิลที่เปิดอยู่', false, function () { loadManage(); }),
+      homeRow('list', 'จัดการบิล', d.openBills > 0 ? d.openBills + ' บิล · ค้างรับ ' + money(d.receivableSatang) : 'ยังไม่มีบิลที่เปิดอยู่', false, openManage),
       homeRow('receipt', 'ที่ฉันต้องจ่าย', d.oweCount > 0 ? d.oweCount + ' รายการ · ' + money(d.oweSatang) : 'ไม่มีรายการค้าง', false, function () { loadOwe(); }),
+      homeRow('history', 'ประวัติการจ่าย', 'สรุปบิลที่จ่ายแล้ว เลือกช่วงวันได้', false, function () { loadHistory(); }),
       homeRow('wallet', 'พร้อมเพย์', d.hasPromptPay ? 'รับเงินที่ ' + (d.promptPayMasked || '') : 'ยังไม่ได้ตั้ง · แตะเพื่อตั้งค่า', false, function () { loadPromptPay(); }),
       homeRow('help', 'วิธีใช้', 'คำสั่งและรายละเอียดทั้งหมด', false, function () { renderHelp(); })
     ]));
+    show(nodes);
+  }
+
+  // ----- paid history: summary of settled bills for a date range (default last 30 days) -----
+  var hist = { role: 'owe', from: null, to: null };
+
+  function ymd(d) { return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); }
+  function daysAgo(n) { var d = new Date(); d.setDate(d.getDate() - n); return ymd(d); }
+
+  function loadHistory() {
+    if (!hist.to) { hist.to = daysAgo(0); hist.from = daysAgo(30); }
+    var qs = '?role=' + hist.role + '&from=' + hist.from + '&to=' + hist.to;
+    return api(API + 'api/app/history' + qs).then(renderHistory);
+  }
+
+  function renderHistory(d) {
+    bar('ประวัติการจ่าย', toHome);
+    var segOwe = el('button', { type: 'button', class: hist.role === 'owe' ? 'on' : '', text: 'ที่ฉันจ่าย' });
+    var segGot = el('button', { type: 'button', class: hist.role === 'collected' ? 'on' : '', text: 'ที่ฉันเก็บได้' });
+    segOwe.addEventListener('click', function () { hist.role = 'owe'; loadHistory(); });
+    segGot.addEventListener('click', function () { hist.role = 'collected'; loadHistory(); });
+
+    var from = el('input', { type: 'date', class: 'inp', value: hist.from, 'aria-label': 'ตั้งแต่วันที่' });
+    var to = el('input', { type: 'date', class: 'inp', value: hist.to, 'aria-label': 'ถึงวันที่' });
+    function apply() { if (from.value && to.value) { hist.from = from.value; hist.to = to.value; loadHistory(); } }
+    from.addEventListener('change', apply);
+    to.addEventListener('change', apply);
+    function quick(label, days) { return chip('history', label, function () { hist.from = daysAgo(days); hist.to = daysAgo(0); loadHistory(); }); }
+
+    var nodes = [
+      el('div', { class: 'card' }, [
+        el('div', { class: 'seg', style: 'margin-top:0' }, [segOwe, segGot]),
+        el('div', { class: 'row sub' }, [from, el('span', { class: 'muted', text: '–' }), to]),
+        el('div', { class: 'chips pad' }, [quick('7 วัน', 7), quick('30 วัน', 30), quick('3 เดือน', 90)])
+      ]),
+      el('div', { class: 'card' }, [
+        el('div', { class: 'muted small', text: (hist.role === 'owe' ? 'จ่ายไปทั้งหมด' : 'ได้รับทั้งหมด') + ' · ' + d.count + ' รายการ' }),
+        el('div', { class: 'amount', text: money(d.totalSatang) })
+      ])
+    ];
+
+    if (!d.items.length) nodes.push(el('div', { class: 'card muted', text: 'ไม่มีรายการในช่วงวันที่นี้' }));
+    else nodes.push(el('div', { class: 'card' }, d.items.map(function (i) {
+      var sub = (hist.role === 'owe' ? 'ให้ ' : 'จาก ') + i.name + (i.groupName ? ' · ' + i.groupName : '') + ' · ' + i.paidAt;
+      return el('div', { class: 'li' }, [avatar(i.pictureUrl, i.name, false),
+        el('span', { class: 'grow' }, [el('strong', { text: i.title }), el('span', { class: 'muted block', text: sub })]),
+        el('strong', { text: money(i.amountSatang) })]);
+    })));
+    if (d.count >= 500) nodes.push(el('div', { class: 'muted small', text: 'แสดง 500 รายการล่าสุด ลดช่วงวันเพื่อดูให้ครบ' }));
     show(nodes);
   }
 
@@ -650,6 +780,7 @@
       ['plus', 'เก็บเงินใหม่', 'เลือกกลุ่ม ใส่ชื่อรายการและยอด เลือกคน แล้วกดสร้างบิล บอทจะส่งการ์ดเก็บเงินเข้ากลุ่มหรือส่งส่วนตัว'],
       ['list', 'จัดการบิล', 'ดูว่าใครจ่ายแล้ว บันทึกรับเงินสด ยกหนี้ ยกเลิกรายการ หรือยกเลิกทั้งบิล'],
       ['receipt', 'ที่ฉันต้องจ่าย', 'รายการที่คุณค้างจ่าย แตะเพื่อดู QR พร้อมเพย์และแนบสลิปได้เลย'],
+      ['history', 'ประวัติการจ่าย', 'สรุปบิลที่จ่ายแล้ว ทั้งที่ฉันจ่ายและที่ฉันเก็บได้ เลือกช่วงวันได้ (เริ่มต้น 30 วันล่าสุด)'],
       ['wallet', 'พร้อมเพย์', 'ตั้งหรือเปลี่ยนเบอร์/เลขบัตรที่ใช้รับเงิน ต้องตั้งก่อนสร้างบิลแรก']
     ];
     var cmds = [
@@ -771,7 +902,7 @@
     parts.push(out);
 
     show([el('div', { class: 'card' }, parts),
-      el('div', { class: 'chips' }, [chip('plus', 'สร้างอีก', loadNew), chip('list', 'จัดการบิล', loadManage), chip('home', 'หน้าหลัก', loadHome)])]);
+      el('div', { class: 'chips' }, [chip('plus', 'สร้างอีก', loadNew), chip('list', 'จัดการบิล', openManage), chip('home', 'หน้าหลัก', loadHome)])]);
   }
 
   // ----- what I owe -----
@@ -800,14 +931,15 @@
     var st = q.get('liff.state') ? new URLSearchParams(q.get('liff.state').replace(/^\?/, '')) : null;
     billToken = q.get('b') || (st && st.get('b'));
     var mode = q.get('mode') || (st && st.get('mode'));
-    if (!billToken && ['pick', 'manage', 'new', 'owe', 'home', 'promptpay', 'help'].indexOf(mode) < 0) mode = 'home';
+    if (!billToken && ['pick', 'manage', 'new', 'owe', 'home', 'promptpay', 'help', 'history'].indexOf(mode) < 0) mode = 'home';
     idToken = liff.getIDToken();
     if (!idToken) { fail('ไม่พบข้อมูลผู้ใช้ ลองเปิดจากแอป LINE อีกครั้ง'); return; }
     if (mode === 'pick') return loadPick();
-    if (mode === 'manage') return loadManage();
+    if (mode === 'manage') return openManage();
     if (mode === 'new') return loadNew();
     if (mode === 'owe') return loadOwe();
     if (mode === 'home') return loadHome();
+    if (mode === 'history') return loadHistory();
     if (mode === 'promptpay') return loadPromptPay();
     if (mode === 'help') return renderHelp();
     return load();

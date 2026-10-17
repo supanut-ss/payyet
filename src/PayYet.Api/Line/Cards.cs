@@ -273,7 +273,7 @@ public static class Cards
 
     // ───────── slip waiting for the collector ─────────
 
-    public static object SlipReview(AppSettings s, string debtorName, long amountSatang, string billTitle, string imageUrl, long paymentId)
+    public static object SlipReview(AppSettings s, string debtorName, long amountSatang, string billTitle, string imageUrl, long paymentId, IReadOnlyList<(string Text, string Color)>? notes = null)
     {
         var bubble = new
         {
@@ -291,9 +291,9 @@ public static class Cards
                 contents = new object[]
                 {
                     new { type = "text", text = "฿" + PayYet.Domain.Money.Format(amountSatang), size = "xxl", weight = "bold", color = Theme.Orange },
-                    new { type = "text", text = Msg.Trunc(billTitle, 60), size = "sm", color = Theme.Muted, wrap = true },
-                    new { type = "text", text = "ตรวจยอดในสลิปให้ตรงก่อนกดยืนยัน", size = "xs", color = Theme.Muted, wrap = true, margin = "md" }
-                }
+                    new { type = "text", text = Msg.Trunc(billTitle, 60), size = "sm", color = Theme.Muted, wrap = true }
+                }.Concat((notes is { Count: > 0 } ? notes : new[] { ("ตรวจยอดในสลิปให้ตรงก่อนกดยืนยัน", Theme.Muted) })
+                    .Select(n => (object)new { type = "text", text = Msg.Trunc(n.Text, 120), size = "xs", color = n.Color, wrap = true, margin = "sm" })).ToArray()
             },
             footer = new
             {

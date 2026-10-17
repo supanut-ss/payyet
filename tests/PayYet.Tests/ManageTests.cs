@@ -192,4 +192,57 @@ public class ManageTests : DbTestBase
         Assert.Single(list);
         Assert.Equal(mine.Bill.Id, list[0].Id);
     }
+
+    // ───────── edit a charge ─────────
+
+    [Fact]
+    public async Task Editing_a_charge_changes_title_and_each_persons_amount()
+    {
+        var r = await NewBill((_a, 10000), (_b, 10000));
+        var itemA = await ItemOf(r, _a);
+        var itemB = await ItemOf(r, _b);
+
+        var res = await _manage.EditChargeAsync(r.Charge.Id, _me.Id, "ค่าข้าวเย็น",
+            new Dictionary<long, long> { [itemA.Id] = 15000, [itemB.Id] = 5000 });
+
+        Assert.True(res.Ok);
+        Db.ChangeTracker.Clear();
+        Assert.Equal(15000, (await ItemOf(r, _a)).AmountSatang);
+        Assert.Equal(5000, (await ItemOf(r, _b)).AmountSatang);
+        var charge = await Db.BillCharges.FirstAsync(c => c.Id == r.Charge.Id);
+        Assert.Equal("ค่าข้าวเย็น", charge.Title);
+        Assert.Equal(20000, charge.TotalSatang);
+        Assert.Equal(SplitMode.CUSTOM, charge.SplitMode);
+    }
+
+    [Fact]
+    public async Task Editing_respects_what_was_already_paid_and_who_may_edit()
+    {
+        var r = await NewBill((_a, 10000), (_b, 10000));
+        var itemA = await ItemOf(r, _a);
+        await _manage.MarkPaidAsync(itemA.Id, _me.Id);                       // a paid 100 in full
+
+        Assert.False((await _manage.EditChargeAsync(r.Charge.Id, _me.Id, null, new Dictionary<long, long> { [itemA.Id] = 5000 })).Ok);   // below what a paid
+        Assert.False((await _manage.EditChargeAsync(r.Charge.Id, _stranger.Id, "x", null)).Ok);                                         // not the creator
+        Assert.False((await _manage.EditChargeAsync(r.Charge.Id, _me.Id, null, null)).Ok);                                              // nothing to change
+
+        // raising the amount puts a fully paid person back to "still owes"
+        Assert.True((await _manage.EditChargeAsync(r.Charge.Id, _me.Id, null, new Dictionary<long, long> { [itemA.Id] = 12000 })).Ok);
+        var after = await ItemOf(r, _a);
+        Assert.Equal(ItemStatus.PENDING, after.Status);
+        Assert.Equal(2000, after.AmountSatang - after.PaidSatang);
+    }
+
+    [Fact]
+    public void Slip_inspector_reads_png_and_jpeg_sizes()
+    {
+        var png = new byte[32];
+        new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A }.CopyTo(png, 0);
+        new byte[] { 0, 0, 2, 0x58, 0, 0, 3, 0x20 }.CopyTo(png, 16);          // 600 x 800
+        Assert.Equal((600, 800), SlipInspector.TryGetSize(png));
+
+        var jpg = new byte[] { 0xFF, 0xD8, 0xFF, 0xE0, 0, 4, 0, 0, 0xFF, 0xC0, 0, 11, 8, 0x03, 0x20, 0x02, 0x58, 3, 0, 0, 0 };   // 600 x 800
+        Assert.Equal((600, 800), SlipInspector.TryGetSize(jpg));
+        Assert.Null(SlipInspector.TryGetSize(new byte[] { 1, 2, 3 }));
+    }
 }

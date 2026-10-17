@@ -123,6 +123,60 @@ public class BillManageService(AppDbContext db, BillService bills)
         return new ManageResult(true, $"ยกเลิกรายการ \"{charge.Title}\" แล้ว", bill);
     }
 
+    /// <summary>
+    /// Renames one charge and/or changes what each person owes for it (<paramref name="newShares"/>: bill item id → new share in satang).
+    /// Refused while a slip waits for that person or when they already paid more than the new amount.
+    /// </summary>
+    public async Task<ManageResult> EditChargeAsync(long chargeId, long collectorId, string? title, IReadOnlyDictionary<long, long>? newShares)
+    {
+        var charge = await db.BillCharges
+            .Include(c => c.Bill).ThenInclude(b => b.Items).ThenInclude(i => i.Debtor)
+            .Include(c => c.Shares)
+            .FirstOrDefaultAsync(c => c.Id == chargeId);
+        if (charge == null || charge.Bill.CreatorId != collectorId) return ManageResult.Fail(NotFound);
+        var bill = charge.Bill;
+        if (bill.Status != BillStatus.OPEN) return ManageResult.Fail("บิลนี้ปิดแล้ว");
+
+        title = title?.Trim();
+        if (!string.IsNullOrEmpty(title) && title.Length > 80) title = title[..80];
+
+        var changes = new List<(BillItem Item, ChargeShare Share, long Delta, long NewShare)>();
+        foreach (var (itemId, satang) in newShares ?? new Dictionary<long, long>())
+        {
+            var share = charge.Shares.FirstOrDefault(s => s.BillItemId == itemId);
+            if (share == null) return ManageResult.Fail("ไม่พบคนนี้ในรายการ");
+            if (satang <= 0 || satang > 100_000_000) return ManageResult.Fail("ยอดต้องมากกว่า 0 และไม่เกิน 1,000,000 บาท");
+            if (satang == share.AmountSatang) continue;
+
+            var item = bill.Items.First(i => i.Id == itemId);
+            if (item.Status == ItemStatus.SUBMITTED) return ManageResult.Fail($"{item.Debtor?.Name} มีสลิปรอตรวจอยู่ ให้ยืนยันหรือปฏิเสธสลิปก่อน");
+            if (item.PaidSatang > item.AmountSatang - share.AmountSatang + satang)
+                return ManageResult.Fail($"{item.Debtor?.Name} จ่ายเกินยอดใหม่แล้ว ให้ \"ยกหนี้\" ของคนนี้แทน");
+            changes.Add((item, share, satang - share.AmountSatang, satang));
+        }
+
+        if (string.IsNullOrEmpty(title) && changes.Count == 0) return ManageResult.Fail("ไม่มีอะไรเปลี่ยนแปลง");
+
+        if (!string.IsNullOrEmpty(title)) charge.Title = title;
+        var now = DateTime.UtcNow;
+        foreach (var (item, share, delta, newShare) in changes)
+        {
+            share.AmountSatang = newShare;
+            item.AmountSatang += delta;
+            if (item.Status == ItemStatus.WAIVED) continue;
+            if (item.PaidSatang >= item.AmountSatang) { item.Status = ItemStatus.PAID; item.PaidAt ??= now; }
+            else if (item.Status == ItemStatus.PAID) { item.Status = ItemStatus.PENDING; item.PaidAt = null; }   // owes more again
+        }
+        if (changes.Count > 0)
+        {
+            charge.TotalSatang = charge.Shares.Sum(s => s.AmountSatang);
+            charge.SplitMode = SplitMode.CUSTOM;
+        }
+        await db.SaveChangesAsync();
+        await bills.CloseIfDoneAsync(bill);
+        return new ManageResult(true, changes.Count > 0 ? $"แก้ไขรายการ \"{charge.Title}\" แล้ว" : "เปลี่ยนชื่อรายการแล้ว", bill);
+    }
+
     /// <summary>Cancels the whole bill. Money already paid is not touched (settle it with the payer yourself).</summary>
     public async Task<ManageResult> CancelBillAsync(long billId, long collectorId)
     {
@@ -142,8 +196,9 @@ public class BillManageService(AppDbContext db, BillService bills)
     /// <summary>The collector's open bills with per-person state, newest first (for the manage page).</summary>
     public Task<List<Bill>> OpenBillsAsync(long collectorId) => db.Bills
         .Include(b => b.Group)
-        .Include(b => b.Charges)
+        .Include(b => b.Charges).ThenInclude(c => c.Shares)
         .Include(b => b.Items).ThenInclude(i => i.Debtor)
+        .Include(b => b.Items).ThenInclude(i => i.Payments)
         .Where(b => b.CreatorId == collectorId && b.Status == BillStatus.OPEN)
         .OrderByDescending(b => b.Id).Take(20).ToListAsync();
 

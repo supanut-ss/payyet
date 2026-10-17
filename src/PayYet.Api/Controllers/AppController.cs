@@ -116,6 +116,58 @@ public class AppController(AppDbContext db, LineClient line, DraftService drafts
         return ok ? Ok(new { message }) : BadRequest(new { error = message });
     }
 
+    /// <summary>
+    /// Paid history for a date range (Bangkok days, inclusive; default the last 30 days).
+    /// role "owe" = what I paid to others, "collected" = what others paid me.
+    /// </summary>
+    [HttpGet("history")]
+    public async Task<IActionResult> History([FromQuery] string? role, [FromQuery] string? from, [FromQuery] string? to)
+    {
+        var user = await AuthUser();
+        if (user == null) return Unauthorized(NotSignedIn);
+
+        var today = BangkokTime.Today;
+        var toDay = DateOnly.TryParse(to, out var t) ? t : today;
+        var fromDay = DateOnly.TryParse(from, out var f) ? f : toDay.AddDays(-30);
+        if (fromDay > toDay) (fromDay, toDay) = (toDay, fromDay);
+        if (toDay.DayNumber - fromDay.DayNumber > 366) fromDay = toDay.AddDays(-366);
+
+        var startUtc = BangkokTime.StartOfDayUtc(fromDay);
+        var endUtc = BangkokTime.StartOfDayUtc(toDay.AddDays(1));
+        var collected = role == "collected";
+
+        var q = db.BillItems
+            .Include(i => i.Bill).ThenInclude(b => b.Creator)
+            .Include(i => i.Bill).ThenInclude(b => b.Group)
+            .Include(i => i.Bill).ThenInclude(b => b.Charges)
+            .Include(i => i.Debtor)
+            .Where(i => i.Status == ItemStatus.PAID && i.PaidAt != null && i.PaidAt >= startUtc && i.PaidAt < endUtc);
+        q = collected ? q.Where(i => i.Bill.CreatorId == user.Id) : q.Where(i => i.DebtorId == user.Id);
+
+        var rows = await q.OrderByDescending(i => i.PaidAt).Take(500).ToListAsync();
+        return Ok(new
+        {
+            role = collected ? "collected" : "owe",
+            from = fromDay.ToString("yyyy-MM-dd"),
+            to = toDay.ToString("yyyy-MM-dd"),
+            count = rows.Count,
+            totalSatang = rows.Sum(i => i.PaidSatang),
+            items = rows.Select(i =>
+            {
+                var other = collected ? i.Debtor : i.Bill.Creator;
+                return new
+                {
+                    title = i.Bill.Charges.OrderBy(c => c.Id).Select(c => c.Title).FirstOrDefault() ?? i.Bill.Title,
+                    name = other?.Name ?? "?",
+                    pictureUrl = string.IsNullOrEmpty(other?.PictureUrl) ? null : other!.PictureUrl,
+                    groupName = i.Bill.Group?.Name,
+                    amountSatang = i.PaidSatang,
+                    paidAt = BangkokTime.FromUtc(i.PaidAt!.Value).ToString("yyyy-MM-dd HH:mm")
+                };
+            })
+        });
+    }
+
     /// <summary>What the signed-in user still has to pay, with the token that opens the pay page.</summary>
     [HttpGet("owe")]
     public async Task<IActionResult> Owe()

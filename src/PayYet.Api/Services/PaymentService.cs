@@ -9,9 +9,11 @@ using PayYet.Line;
 namespace PayYet.Services;
 
 public class PaymentService(AppDbContext db, LineClient line, BillService bills, IOptions<AppSettings> options,
-    IWebHostEnvironment env)
+    IWebHostEnvironment env, SlipVerifier verifier)
 {
     public const long MaxSlipBytes = 5 * 1024 * 1024;
+    public const int MinSlipSide = 300;          // px: anything smaller cannot be a real slip screenshot
+    public const int MaxSlipsPerDay = 4;         // per bill item, counting rejected ones
 
     public static string? DetectImageType(byte[] d)
     {
@@ -28,6 +30,8 @@ public class PaymentService(AppDbContext db, LineClient line, BillService bills,
         var type = DetectImageType(data);
         if (type == null) return (false, "ไฟล์ต้องเป็นรูป JPEG หรือ PNG");
         if (data.Length > MaxSlipBytes) return (false, "ไฟล์ใหญ่เกิน 5 MB");
+        if (SlipInspector.TryGetSize(data) is { } size && Math.Min(size.Width, size.Height) < MinSlipSide)
+            return (false, "รูปเล็กเกินไป กรุณาแนบรูปสลิปเต็มใบจากแอปธนาคาร");
 
         var item = await db.BillItems
             .Include(i => i.Bill).ThenInclude(b => b.Creator)
@@ -40,8 +44,17 @@ public class PaymentService(AppDbContext db, LineClient line, BillService bills,
         if (amountSatang <= 0 || amountSatang > item.Remaining)
             return (false, $"ยอดไม่ถูกต้อง (คงเหลือ {Money.Format(item.Remaining)} บาท)");
 
+        var since = DateTime.UtcNow.AddHours(-24);
+        if (await db.Payments.CountAsync(p => p.BillItemId == item.Id && p.CreatedAt >= since && p.SlipPath != "cash") >= MaxSlipsPerDay)
+            return (false, "ส่งสลิปบ่อยเกินไป ลองใหม่พรุ่งนี้ หรือติดต่อผู้เก็บเงินโดยตรง");
+
         var hash = Convert.ToHexString(SHA256.HashData(data)).ToLowerInvariant();
         if (await db.Payments.AnyAsync(p => p.SlipHash == hash)) return (false, "สลิปนี้เคยถูกส่งแล้ว");
+
+        // Optional bank check: the same transaction can never pay two bills, and the amount must match what the payer declared.
+        var check = await verifier.VerifyAsync(data, type, amountSatang);
+        if (check.Checked && !check.Ok) return (false, check.Error ?? "ตรวจสลิปไม่ผ่าน");
+        if (check.Ref != null && await db.Payments.AnyAsync(p => p.SlipRef == check.Ref)) return (false, "สลิปนี้เคยถูกใช้แล้ว");
 
         var ext = type == "image/png" ? ".png" : ".jpg";
         var rel = Path.Combine(DateTime.UtcNow.ToString("yyyyMM"), hash[..32] + ext);
@@ -56,6 +69,8 @@ public class PaymentService(AppDbContext db, LineClient line, BillService bills,
             SlipHash = hash,
             MediaToken = Token.Hex(),
             AmountSatang = amountSatang,
+            SlipRef = check.Ref,
+            VerifiedBy = check.Checked ? "BANK" : null,
             Status = PaymentStatus.SUBMITTED,
             CreatedAt = DateTime.UtcNow
         };
@@ -66,9 +81,26 @@ public class PaymentService(AppDbContext db, LineClient line, BillService bills,
 
         var imageUrl = $"{options.Value.App.PublicBaseUrl.TrimEnd('/')}/media/{payment.MediaToken}";
         var who = item.Debtor!.Name;
-        await line.PushAsync(item.Bill.Creator.LineUserId,
-            Cards.SlipReview(options.Value, who, amountSatang, item.Bill.Title, imageUrl, payment.Id));
-        return (true, "ส่งสลิปแล้ว รอผู้เก็บตรวจสอบ");
+        var notes = new List<(string, string)>();
+        notes.Add(check.Checked ? ("✅ ตรวจกับธนาคารแล้ว ยอดและเลขอ้างอิงถูกต้อง", Theme.Green) : ("ยังไม่ได้ตรวจกับธนาคาร โปรดเช็กยอดในสลิปก่อนกดยืนยัน", Theme.Muted));
+        if (amountSatang < item.Remaining)
+            notes.Add(($"⚠️ ผู้จ่ายแจ้งจ่ายบางส่วน ฿{Money.Format(amountSatang)} จากที่ค้าง ฿{Money.Format(item.Remaining)}", Theme.Amber));
+        var delivered = await line.PushAsync(item.Bill.Creator.LineUserId,
+            Cards.SlipReview(options.Value, who, amountSatang, item.Bill.Title, imageUrl, payment.Id, notes));
+        if (delivered) return (true, "ส่งสลิปแล้ว รอผู้เก็บตรวจสอบ");
+
+        // The collector cannot be messaged (never added / blocked the bot): say so, and tell the group where the slip can still be approved.
+        var creator = item.Bill.Creator;
+        creator.IsFriend = false;
+        await db.SaveChangesAsync();
+        if (item.Bill.GroupId.HasValue)
+        {
+            var group = await db.Groups.FindAsync(item.Bill.GroupId.Value);
+            if (group is { Active: true })
+                await line.PushAsync(group.LineGroupId, Msg.Text(
+                    $"⚠️ {creator.Name} มีสลิปรอตรวจจาก {who} แต่บอทส่งข้อความหาไม่ได้ (ยังไม่ได้เพิ่มบอทเป็นเพื่อนหรือบล็อกอยู่)\nกรุณาเพิ่มบอทเป็นเพื่อน แล้วเปิดเมนู \"จัดการบิล\" เพื่อยืนยันสลิป"));
+        }
+        return (true, "⚠️ ส่งสลิปแล้ว แต่ผู้เก็บยังไม่ได้รับแจ้งเตือน (บอทส่งข้อความหาเขาไม่ได้) ลองแจ้งผู้เก็บให้เปิดหน้า \"จัดการบิล\" เพื่อยืนยันสลิป");
     }
 
     public async Task<string> ApproveAsync(long paymentId, string byLineUserId)
@@ -79,7 +111,7 @@ public class PaymentService(AppDbContext db, LineClient line, BillService bills,
 
         var item = p.BillItem;
         p.Status = PaymentStatus.APPROVED;
-        p.VerifiedBy = "CREATOR";
+        p.VerifiedBy ??= "CREATOR";   // keeps "BANK" when the bank already verified the slip
         item.PaidSatang += p.AmountSatang;
         if (item.PaidSatang >= item.AmountSatang) { item.Status = ItemStatus.PAID; item.PaidAt = DateTime.UtcNow; }
         else item.Status = ItemStatus.PENDING;

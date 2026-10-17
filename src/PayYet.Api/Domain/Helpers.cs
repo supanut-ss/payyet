@@ -19,6 +19,8 @@ public static class BangkokTime
 
     public static DateTime Now => TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, Tz);
     public static DateOnly Today => DateOnly.FromDateTime(Now);
+    /// <summary>Midnight (Bangkok) at the start of the given day, as UTC.</summary>
+    public static DateTime StartOfDayUtc(DateOnly day) => TimeZoneInfo.ConvertTimeToUtc(day.ToDateTime(TimeOnly.MinValue), Tz);
     public static DateTime FromUtc(DateTime utc) => TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(utc, DateTimeKind.Utc), Tz);
 }
 
