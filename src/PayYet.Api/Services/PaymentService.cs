@@ -9,7 +9,7 @@ using PayYet.Line;
 namespace PayYet.Services;
 
 public class PaymentService(AppDbContext db, LineClient line, BillService bills, IOptions<AppSettings> options,
-    IWebHostEnvironment env, SlipVerifier verifier)
+    IWebHostEnvironment env, SlipVerifier verifier, SlipQrVerifier qrVerifier, SlipAmountChecker amountChecker)
 {
     public const long MaxSlipBytes = 5 * 1024 * 1024;
     public const int MinSlipSide = 300;          // px: anything smaller cannot be a real slip screenshot
@@ -53,7 +53,14 @@ public class PaymentService(AppDbContext db, LineClient line, BillService bills,
 
         // Optional bank check: the same transaction can never pay two bills, and the amount must match what the payer declared.
         var check = await verifier.VerifyAsync(data, type, amountSatang);
+        if (!check.Checked) check = qrVerifier.Verify(data, item.Bill.CreatedAt);   // no provider: read the slip's own QR instead
         if (check.Checked && !check.Ok) return (false, check.Error ?? "ตรวจสลิปไม่ผ่าน");
+
+        // The bank provider already confirmed the amount; otherwise read it off the slip and compare with what the payer declared.
+        SlipAmountResult? amount = check.Source == "BANK" && check.Checked ? null : amountChecker.Check(data, amountSatang);
+        if (amount is { Check: AmountCheck.Mismatch } && options.Value.SlipVerify.AmountCheck == "reject")
+            return (false, $"ยอดในสลิป ({string.Join(", ", amount.Found.Select(v => "฿" + Money.Format((long)Math.Round(v * 100))))}) ไม่ตรงกับยอดที่แจ้ง ฿{Money.Format(amountSatang)} " +
+                           "กรุณาแก้ยอดให้ตรงกับสลิป หรือแนบรูปสลิปเต็มใบที่ชัดเจน");
         if (check.Ref != null && await db.Payments.AnyAsync(p => p.SlipRef == check.Ref)) return (false, "สลิปนี้เคยถูกใช้แล้ว");
 
         var ext = type == "image/png" ? ".png" : ".jpg";
@@ -70,7 +77,7 @@ public class PaymentService(AppDbContext db, LineClient line, BillService bills,
             MediaToken = Token.Hex(),
             AmountSatang = amountSatang,
             SlipRef = check.Ref,
-            VerifiedBy = check.Checked ? "BANK" : null,
+            VerifiedBy = check.Checked ? check.Source : null,
             Status = PaymentStatus.SUBMITTED,
             CreatedAt = DateTime.UtcNow
         };
@@ -82,7 +89,16 @@ public class PaymentService(AppDbContext db, LineClient line, BillService bills,
         var imageUrl = $"{options.Value.App.PublicBaseUrl.TrimEnd('/')}/media/{payment.MediaToken}";
         var who = item.Debtor!.Name;
         var notes = new List<(string, string)>();
-        notes.Add(check.Checked ? ("✅ ตรวจกับธนาคารแล้ว ยอดและเลขอ้างอิงถูกต้อง", Theme.Green) : ("ยังไม่ได้ตรวจกับธนาคาร โปรดเช็กยอดในสลิปก่อนกดยืนยัน", Theme.Muted));
+        if (check.Checked && check.Source == "BANK") notes.Add(("✅ ตรวจกับธนาคารแล้ว ยอดและเลขอ้างอิงถูกต้อง", Theme.Green));
+        else if (check.Checked) notes.Add(($"✅ {check.Note} · โปรดเช็กยอดในแอปธนาคาร", Theme.Green));
+        else notes.Add((check.Note ?? "ยังไม่ได้ตรวจกับธนาคาร โปรดเช็กยอดในสลิปก่อนกดยืนยัน", Theme.Muted));
+        if (amount != null)
+            notes.Add(amount.Check switch
+            {
+                AmountCheck.Match => ($"✅ ยอดในสลิปตรงกับที่แจ้ง ฿{Money.Format(amountSatang)}", Theme.Green),
+                AmountCheck.Mismatch => ($"⚠️ ยอดในสลิปอ่านได้ {string.Join(", ", amount.Found.Select(v => "฿" + Money.Format((long)Math.Round(v * 100))))} ไม่ตรงกับที่แจ้ง ฿{Money.Format(amountSatang)}", Theme.Red),
+                _ => ("อ่านยอดจากสลิปไม่ได้ โปรดเช็กยอดในสลิปเอง", Theme.Muted)
+            });
         if (amountSatang < item.Remaining)
             notes.Add(($"⚠️ ผู้จ่ายแจ้งจ่ายบางส่วน ฿{Money.Format(amountSatang)} จากที่ค้าง ฿{Money.Format(item.Remaining)}", Theme.Amber));
         var delivered = await line.PushAsync(item.Bill.Creator.LineUserId,

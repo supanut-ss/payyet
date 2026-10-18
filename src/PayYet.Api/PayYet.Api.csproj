@@ -16,10 +16,17 @@
     <PackageReference Include="Pomelo.EntityFrameworkCore.MySql" Version="8.0.2" />
     <PackageReference Include="EFCore.NamingConventions" Version="8.0.3" />
     <PackageReference Include="QRCoder" Version="1.6.0" />
+    <PackageReference Include="Tesseract" Version="5.2.0" />
+    <PackageReference Include="ZXing.Net" Version="0.16.11" />
+    <PackageReference Include="ZXing.Net.Bindings.ImageSharp.V3" Version="0.16.20" />
   </ItemGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="PayYet.Tests" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- OCR language data used to read the amount printed on slips -->
+    <Content Include="tessdata\**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

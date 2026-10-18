@@ -33,6 +33,8 @@ builder.Services.AddScoped<BillManageService>();
 builder.Services.AddScoped<BillCreationService>();
 builder.Services.AddScoped<DraftService>();
 builder.Services.AddHttpClient<SlipVerifier>(c => c.Timeout = TimeSpan.FromSeconds(20));
+builder.Services.AddSingleton<SlipQrVerifier>();
+builder.Services.AddSingleton<SlipAmountChecker>();
 builder.Services.AddScoped<PaymentService>();
 builder.Services.AddScoped<BillCardBuilder>();
 builder.Services.AddScoped<DraftCardBuilder>();
@@ -61,9 +63,9 @@ app.MapGet("/ping", (HttpContext ctx) => Results.Json(new
 }));
 
 // Used by the deploy script: 200 only when the app started with its config and can reach the database.
-app.MapGet("/health", async (AppDbContext db) =>
+app.MapGet("/health", async (AppDbContext db, SlipAmountChecker ocr) =>
     await db.Database.CanConnectAsync()
-        ? Results.Json(new { ok = true, db = true })
+        ? Results.Json(new { ok = true, db = true, slipOcr = ocr.SelfTest() })
         : Results.Json(new { ok = false, db = false }, statusCode: 503));
 
 // The LIFF page moved to the web app; keep old LIFF endpoint links working (query string, incl. liff.state, is preserved).

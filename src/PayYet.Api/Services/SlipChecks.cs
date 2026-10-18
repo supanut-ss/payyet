@@ -37,7 +37,8 @@ public static class SlipInspector
 
 /// <param name="Checked">False when no verifier is configured or it could not be reached: the slip is then only checked by the collector.</param>
 /// <param name="Ok">Meaningful only when Checked: the bank confirmed the slip and the amount matches.</param>
-public record SlipVerification(bool Checked, bool Ok, string? Ref = null, string? Error = null)
+/// <param name="Source">"BANK" when a provider confirmed it with the bank, "QR" when only the slip's own QR code was checked.</param>
+public record SlipVerification(bool Checked, bool Ok, string? Ref = null, string? Error = null, string Source = "BANK", string? Note = null)
 {
     public static readonly SlipVerification Skipped = new(false, false);
 }

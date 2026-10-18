@@ -37,6 +37,14 @@ public class SlipVerifySection
     public string Provider { get; set; } = "";   // "slipok" or empty
     public string BranchId { get; set; } = "";
     public string ApiKey { get; set; } = "";
+
+    // Offline check of the QR printed on the slip (no provider needed): CRC, bank code, age, and no re-use of the same transfer.
+    public bool QrCheck { get; set; } = true;
+    public bool RequireQr { get; set; }       // true = a slip without a readable QR is refused (strict); false = collector checks it by hand
+    public int MaxAgeDays { get; set; } = 7;  // slips older than this are refused when their date can be read
+
+    // Amount printed on the slip (read with OCR) vs the amount the payer declared: "warn" (default) sends the slip to the collector with a warning, "reject" refuses a mismatch at once, "off" skips it.
+    public string AmountCheck { get; set; } = "warn";
 }
 
 public class JobsSection
