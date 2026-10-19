@@ -68,7 +68,6 @@ public class JobsController(IOptions<AppSettings> options, ReminderService remin
         // housekeeping: webhook idempotency rows older than 7 days
         var cutoff = DateTime.UtcNow.AddDays(-7);
         await db.ProcessedEvents.Where(e => e.ProcessedAt < cutoff).ExecuteDeleteAsync();
-        await LocationRetention.PurgeAsync(db, options.Value.OwnTracks.RetentionDays);
         return Ok(result);
     }
 }

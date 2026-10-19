@@ -57,5 +57,5 @@ public class JobsSection
 public class OwnTracksSection
 {
     public string Token { get; set; } = "";            // shared secret: OwnTracks "password" (HTTP Basic) or ?key=
-    public int RetentionDays { get; set; } = 90;       // pings older than this are purged by the daily job (0 = keep forever)
+    public int RetentionDays { get; set; } = 30;       // pings received longer ago than this are purged when the page loads (0 = keep forever)
 }

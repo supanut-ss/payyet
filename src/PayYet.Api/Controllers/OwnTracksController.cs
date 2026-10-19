@@ -79,6 +79,13 @@ public class OwnTracksController(IOptions<AppSettings> options, AppDbContext db,
         if (string.IsNullOrEmpty(expected)) return StatusCode(503, "OwnTracks:Token is not configured");
         if (!TokenMatches(expected)) return Unauthorized();
 
+        // No scheduled job: loading the page clears pings older than the retention limit (checked at most once an hour).
+        if (requests.PurgeDue(TimeSpan.FromHours(1)))
+        {
+            try { await LocationRetention.PurgeAsync(db, options.Value.OwnTracks.RetentionDays); }
+            catch (Exception ex) { HttpContext?.RequestServices?.GetService<ILogger<OwnTracksController>>()?.LogWarning(ex, "Purging old location pings failed"); }
+        }
+
         // One indexed lookup (name, recorded_at) per person: cheap however many pings are stored.
         var names = string.IsNullOrWhiteSpace(name)
             ? await db.LocationPings.Select(p => p.Name).Distinct().OrderBy(n => n).ToListAsync()

@@ -11,6 +11,14 @@ public class LocationRequests
     public static readonly TimeSpan Lifetime = TimeSpan.FromMinutes(30);
     private readonly ConcurrentDictionary<string, DateTime> _pending = new(StringComparer.OrdinalIgnoreCase);
 
+    // Housekeeping gate: the purge of old pings runs from /latest (page loads), at most once per interval.
+    private long _lastPurgeTicks;
+    public bool PurgeDue(TimeSpan every)
+    {
+        var now = DateTime.UtcNow.Ticks; var last = Interlocked.Read(ref _lastPurgeTicks);
+        return now - last >= every.Ticks && Interlocked.CompareExchange(ref _lastPurgeTicks, now, last) == last;
+    }
+
     public void Request(string name) => _pending[name] = DateTime.UtcNow;
 
     public bool IsPending(string name) => _pending.TryGetValue(name, out var at) && DateTime.UtcNow - at <= Lifetime;

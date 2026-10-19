@@ -367,3 +367,63 @@ public class OwnTracksHardeningTests : DbTestBase
         Assert.Equal("new", (await Db.LocationPings.SingleAsync()).Name);
     }
 }
+
+public class OwnTracksPurgeOnLoadTests : DbTestBase
+{
+    private readonly LocationRequests _requests = new();
+
+    private OwnTracksController NewController(int retentionDays = 30)
+    {
+        var c = new OwnTracksController(Microsoft.Extensions.Options.Options.Create(new AppSettings { OwnTracks = { Token = "secret", RetentionDays = retentionDays } }), Db, _requests)
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
+        };
+        c.Request.QueryString = new QueryString("?key=secret");
+        return c;
+    }
+
+    private void Ping(string name, int daysAgo) =>
+        Db.LocationPings.Add(new PayYet.Data.LocationPing { Name = name, Lat = 1, Lon = 2, RecordedAt = DateTime.UtcNow.AddDays(-daysAgo), ReceivedAt = DateTime.UtcNow.AddDays(-daysAgo) });
+
+    [Fact]
+    public void The_default_retention_is_30_days()
+    {
+        Assert.Equal(30, new AppSettings().OwnTracks.RetentionDays);
+    }
+
+    [Fact]
+    public async Task Loading_the_page_deletes_pings_older_than_30_days_but_keeps_newer_ones()
+    {
+        Ping("old", 31); Ping("recent", 29); Ping("today", 0);
+        await Db.SaveChangesAsync();
+
+        await NewController().Latest(null);
+
+        Assert.Equal(new[] { "recent", "today" }, (await Db.LocationPings.Select(p => p.Name).OrderBy(n => n).ToListAsync()).ToArray());
+    }
+
+    [Fact]
+    public async Task The_purge_runs_at_most_once_an_hour()
+    {
+        Ping("keep", 0);
+        await Db.SaveChangesAsync();
+        await NewController().Latest(null);            // first load: purge runs
+
+        Ping("old-later", 40);
+        await Db.SaveChangesAsync();
+        await NewController().Latest(null);            // second load within the hour: skipped
+
+        Assert.Contains("old-later", await Db.LocationPings.Select(p => p.Name).ToListAsync());
+    }
+
+    [Fact]
+    public async Task Zero_retention_keeps_everything()
+    {
+        Ping("ancient", 400);
+        await Db.SaveChangesAsync();
+
+        await NewController(retentionDays: 0).Latest(null);
+
+        Assert.Single(await Db.LocationPings.ToListAsync());
+    }
+}
