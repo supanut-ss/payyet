@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using PayYet.Config;
 using PayYet.Data;
+using PayYet.Domain;
 using PayYet.Services;
 
 namespace PayYet.Controllers;
@@ -89,6 +90,50 @@ public class OwnTracksController(IOptions<AppSettings> options, AppDbContext db,
             recordedAt = DateTime.SpecifyKind(p.RecordedAt, DateTimeKind.Utc),
             requested = requests.IsPending(p.Name),
         }));
+    }
+
+    // One person's track for one Bangkok calendar day (?date=yyyy-MM-dd, default today), oldest first.
+    // A very dense day is thinned evenly to at most MaxTrackPoints, always keeping the first and last point.
+    private const int MaxTrackPoints = 1500;
+
+    [HttpGet("owntracks/history")]
+    public async Task<IActionResult> History([FromQuery] string? name, [FromQuery] string? date)
+    {
+        var expected = options.Value.OwnTracks.Token;
+        if (string.IsNullOrEmpty(expected)) return StatusCode(503, "OwnTracks:Token is not configured");
+        if (!TokenMatches(expected)) return Unauthorized();
+        if (string.IsNullOrWhiteSpace(name)) return BadRequest("name is required");
+
+        var day = BangkokTime.Today;
+        if (!string.IsNullOrWhiteSpace(date) && !DateOnly.TryParseExact(date, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out day))
+            return BadRequest("date must be yyyy-MM-dd");
+
+        var from = BangkokTime.StartOfDayUtc(day);
+        var to = BangkokTime.StartOfDayUtc(day.AddDays(1));
+        var n = name.Trim();
+        var all = await db.LocationPings.Where(p => p.Name == n && p.RecordedAt >= from && p.RecordedAt < to)
+            .OrderBy(p => p.RecordedAt).ThenBy(p => p.Id).ToListAsync();
+
+        var points = all;
+        if (all.Count > MaxTrackPoints)
+        {
+            var step = (double)(all.Count - 1) / (MaxTrackPoints - 1);
+            points = Enumerable.Range(0, MaxTrackPoints).Select(i => all[(int)Math.Round(i * step)]).ToList();
+        }
+        return Ok(new
+        {
+            name = n,
+            date = day.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture),
+            total = all.Count,
+            points = points.Select(p => new
+            {
+                lat = p.Lat,
+                lon = p.Lon,
+                accuracy = p.Accuracy,
+                battery = p.Battery,
+                recordedAt = DateTime.SpecifyKind(p.RecordedAt, DateTimeKind.Utc),
+            }),
+        });
     }
 
     // Removes every stored ping of one person (e.g. test data). The name is required, so a bare call cannot wipe the table.

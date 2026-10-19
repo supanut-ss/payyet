@@ -248,3 +248,63 @@ public class OwnTracksRequestTests : DbTestBase
         Assert.False(_requests.IsPending("mama"));
     }
 }
+
+public class OwnTracksHistoryTests : DbTestBase
+{
+    private OwnTracksController NewController(string query = "?key=secret")
+    {
+        var c = new OwnTracksController(Microsoft.Extensions.Options.Options.Create(new AppSettings { OwnTracks = { Token = "secret" } }), Db, new LocationRequests())
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
+        };
+        c.Request.QueryString = new QueryString(query);
+        return c;
+    }
+
+    private void Ping(string name, DateTime utc, double lat = 1) =>
+        Db.LocationPings.Add(new PayYet.Data.LocationPing { Name = name, Lat = lat, Lon = 2, RecordedAt = utc, ReceivedAt = utc });
+
+    private static JsonElement Body(IActionResult r) => JsonDocument.Parse(JsonSerializer.Serialize(Assert.IsType<OkObjectResult>(r).Value)).RootElement;
+
+    [Fact]
+    public async Task Returns_one_bangkok_day_of_one_person_oldest_first()
+    {
+        // 2026-10-19 in Bangkok is 2026-10-18T17:00Z .. 2026-10-19T17:00Z
+        Ping("mama", new DateTime(2026, 10, 18, 16, 59, 0, DateTimeKind.Utc), 9);   // the day before (Bangkok 23:59 on the 18th)
+        Ping("mama", new DateTime(2026, 10, 19, 5, 0, 0, DateTimeKind.Utc), 3);
+        Ping("mama", new DateTime(2026, 10, 18, 17, 0, 0, DateTimeKind.Utc), 1);     // exactly Bangkok midnight
+        Ping("mama", new DateTime(2026, 10, 19, 17, 0, 0, DateTimeKind.Utc), 8);    // the day after
+        Ping("papa", new DateTime(2026, 10, 19, 5, 0, 0, DateTimeKind.Utc), 7);
+        await Db.SaveChangesAsync();
+
+        var json = Body(await NewController().History("mama", "2026-10-19"));
+
+        Assert.Equal(2, json.GetProperty("total").GetInt32());
+        var pts = json.GetProperty("points").EnumerateArray().ToList();
+        Assert.Equal(new[] { 1.0, 3.0 }, pts.Select(p => p.GetProperty("lat").GetDouble()).ToArray());
+    }
+
+    [Fact]
+    public async Task A_dense_day_is_thinned_but_keeps_the_first_and_last_points()
+    {
+        var t = new DateTime(2026, 10, 19, 1, 0, 0, DateTimeKind.Utc);
+        for (var i = 0; i < 3000; i++) Ping("mama", t.AddSeconds(i), i);
+        await Db.SaveChangesAsync();
+
+        var json = Body(await NewController().History("mama", "2026-10-19"));
+
+        var pts = json.GetProperty("points").EnumerateArray().ToList();
+        Assert.Equal(3000, json.GetProperty("total").GetInt32());
+        Assert.Equal(1500, pts.Count);
+        Assert.Equal(0, pts[0].GetProperty("lat").GetDouble());
+        Assert.Equal(2999, pts[^1].GetProperty("lat").GetDouble());
+    }
+
+    [Fact]
+    public async Task Bad_input_and_wrong_keys_are_refused()
+    {
+        Assert.IsType<BadRequestObjectResult>(await NewController().History(null, "2026-10-19"));
+        Assert.IsType<BadRequestObjectResult>(await NewController().History("mama", "19/10/2026"));
+        Assert.IsType<UnauthorizedResult>(await NewController("?key=nope").History("mama", "2026-10-19"));
+    }
+}
