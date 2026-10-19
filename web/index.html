@@ -166,6 +166,9 @@
   .final .box { background:linear-gradient(135deg,var(--brand),#ffb347); color:var(--onbrand); border-radius:36px; padding:44px 22px; }
   .final h2 { margin:0 0 8px; } .final p { font-size:18px; margin-bottom:22px; opacity:.85; }
   .final .cta { justify-content:center; margin:0; }
+  .final .addqr { margin:26px auto 0; width:max-content; max-width:100%; }
+  .final .addqr img { display:block; width:168px; height:168px; background:#fff; border-radius:18px; padding:8px; box-shadow:0 6px 18px rgba(0,0,0,.18); }
+  .final .addqr figcaption { margin-top:10px; font-size:14px; opacity:.85; }
   .final .btn.ghost { color:var(--onbrand); border-color:rgba(43,20,0,.35); }
   footer { padding:26px 0 40px; color:var(--muted); font-size:13px; text-align:center; }
 
@@ -372,6 +375,10 @@
           <a class="btn line hidden" data-add href="#"><svg class="i"><use href="#i-chat"/></svg>เพิ่มเพื่อน LINE</a>
           <button class="btn ghost" type="button" data-share><svg class="i"><use href="#i-share"/></svg>ส่งต่อให้เพื่อน</button>
         </div>
+        <figure class="addqr">
+          <img src="img/add-friend-qr.png" width="168" height="168" alt="QR สำหรับเพิ่มเพื่อน LINE PayYet">
+          <figcaption>สแกนด้วยกล้องหรือ LINE เพื่อเพิ่มเพื่อน · @128cbqvp</figcaption>
+        </figure>
       </div>
     </div>
   </section>
@@ -391,14 +398,16 @@
 </div>
 
 <script>
-  // "Add friend" buttons appear only when the server knows the official account URL (App:LineOaUrl).
-  var oaUrl = '';
+  // "Add friend" buttons use the official account link; the server value (App:LineOaUrl or the bot's basic id) wins when it answers.
+  var oaUrl = 'https://line.me/R/ti/p/@128cbqvp';
+  function showAdd(url) {
+    oaUrl = url;
+    document.querySelectorAll('[data-add]').forEach(function (a) { a.href = url; a.classList.remove('hidden'); });
+    var how = document.querySelector('[data-howlink]'); if (how) how.classList.add('hidden');
+  }
+  showAdd(oaUrl);
   fetch('https://api.drivetodev.online/api/pay/config').then(function (r) { return r.json(); }).then(function (c) {
-    if (c && /^https:\/\/(line\.me|lin\.ee)\//.test(c.oaUrl || '')) {
-      oaUrl = c.oaUrl;
-      document.querySelectorAll('[data-add]').forEach(function (a) { a.href = oaUrl; a.classList.remove('hidden'); });
-      var how = document.querySelector('[data-howlink]'); if (how) how.classList.add('hidden');
-    }
+    if (c && /^https:\/\/(line\.me|lin\.ee)\//.test(c.oaUrl || '')) showAdd(c.oaUrl);
   }).catch(function () {});
 
   // Invite a friend: native share sheet when available, otherwise copy the link.

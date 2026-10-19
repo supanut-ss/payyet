@@ -94,7 +94,7 @@ public class MediaController(AppDbContext db, PaymentService payments) : Control
 public class PayController(AppDbContext db, LineClient line, PaymentService payments, BillCreationService creation, IOptions<AppSettings> options) : ControllerBase
 {
     [HttpGet("config")]
-    public IActionResult Config() => Ok(new { liffId = options.Value.Liff.Id, oaUrl = options.Value.App.LineOaUrl });
+    public async Task<IActionResult> Config() => Ok(new { liffId = options.Value.Liff.Id, oaUrl = await line.GetOaUrlAsync() ?? options.Value.App.LineOaUrl });
 
     // ---- paying several bills with one transfer ----
 
