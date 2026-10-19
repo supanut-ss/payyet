@@ -6,11 +6,12 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using PayYet.Config;
 using PayYet.Data;
+using PayYet.Services;
 
 namespace PayYet.Controllers;
 
 [ApiController]
-public class OwnTracksController(IOptions<AppSettings> options, AppDbContext db) : ControllerBase
+public class OwnTracksController(IOptions<AppSettings> options, AppDbContext db, LocationRequests requests) : ControllerBase
 {
     // OwnTracks (HTTP mode) POSTs one JSON object per report, e.g.
     // {"_type":"location","tid":"ma","lat":13.75,"lon":100.5,"acc":12,"batt":87,"tst":1760000000}
@@ -24,19 +25,18 @@ public class OwnTracksController(IOptions<AppSettings> options, AppDbContext db)
         if (!TokenMatches(expected)) return Unauthorized();
 
         // OwnTracks expects 200 + a JSON array (commands/cards for the phone); other message types are acknowledged and ignored.
+        var name = PersonOf(body);
         if (body.ValueKind != JsonValueKind.Object || Str(body, "_type") != "location"
             || !Num(body, "lat", out var lat) || !Num(body, "lon", out var lon)
             || lat is < -90 or > 90 || lon is < -180 or > 180)
-            return Ok(Array.Empty<object>());
+            return Ok(CommandsFor(name));
 
-        var name = (Request.Headers["X-Limit-U"].FirstOrDefault() ?? Str(body, "tid") ?? "").Trim();
-        if (name.Length == 0) name = "unknown";
         var now = DateTime.UtcNow;
         var recorded = Num(body, "tst", out var tst) && tst > 0 && tst < 4_102_444_800 ? DateTimeOffset.FromUnixTimeSeconds((long)tst).UtcDateTime : now;
 
         db.LocationPings.Add(new LocationPing
         {
-            Name = Cut(name, 64),
+            Name = name,
             Device = Cut(Request.Headers["X-Limit-D"].FirstOrDefault(), 64),
             Lat = lat,
             Lon = lon,
@@ -46,7 +46,23 @@ public class OwnTracksController(IOptions<AppSettings> options, AppDbContext db)
             ReceivedAt = now,
         });
         await db.SaveChangesAsync();
-        return Ok(Array.Empty<object>());
+        return Ok(CommandsFor(name));
+    }
+
+    // Asks one person's phone to report its position. The phone gets the command in the response of its next post
+    // (OwnTracks needs "Remote commands" switched on); until then /latest shows the request as pending.
+    [HttpPost("owntracks/request")]
+    public async Task<IActionResult> RequestLocation([FromQuery] string? name)
+    {
+        var expected = options.Value.OwnTracks.Token;
+        if (string.IsNullOrEmpty(expected)) return StatusCode(503, "OwnTracks:Token is not configured");
+        if (!TokenMatches(expected)) return Unauthorized();
+        if (string.IsNullOrWhiteSpace(name)) return BadRequest("name is required");
+
+        var n = name.Trim();
+        if (!await db.LocationPings.AnyAsync(p => p.Name == n)) return NotFound();
+        requests.Request(n);
+        return Ok(new { name = n, requested = true });
     }
 
     // Latest position of each person (or just ?name=). Same token as the POST.
@@ -71,8 +87,33 @@ public class OwnTracksController(IOptions<AppSettings> options, AppDbContext db)
             accuracy = p.Accuracy,
             battery = p.Battery,
             recordedAt = DateTime.SpecifyKind(p.RecordedAt, DateTimeKind.Utc),
+            requested = requests.IsPending(p.Name),
         }));
     }
+
+    // Removes every stored ping of one person (e.g. test data). The name is required, so a bare call cannot wipe the table.
+    [HttpDelete("owntracks")]
+    public async Task<IActionResult> DeletePerson([FromQuery] string? name)
+    {
+        var expected = options.Value.OwnTracks.Token;
+        if (string.IsNullOrEmpty(expected)) return StatusCode(503, "OwnTracks:Token is not configured");
+        if (!TokenMatches(expected)) return Unauthorized();
+        if (string.IsNullOrWhiteSpace(name)) return BadRequest("name is required");
+
+        var n = name.Trim();
+        var deleted = await db.LocationPings.Where(p => p.Name == n).ExecuteDeleteAsync();
+        return Ok(new { name = n, deleted });
+    }
+
+    private string PersonOf(JsonElement body)
+    {
+        var name = (Request.Headers["X-Limit-U"].FirstOrDefault() ?? (body.ValueKind == JsonValueKind.Object ? Str(body, "tid") : null) ?? "").Trim();
+        return name.Length == 0 ? "unknown" : Cut(name, 64)!;
+    }
+
+    // The phone's reply to a post: a "report your location" command when someone asked for one, else nothing.
+    private object[] CommandsFor(string name) =>
+        requests.Take(name) ? [new { _type = "cmd", action = "reportLocation" }] : [];
 
     private bool TokenMatches(string expected)
     {

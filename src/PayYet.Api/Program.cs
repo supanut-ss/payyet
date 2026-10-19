@@ -41,6 +41,7 @@ builder.Services.AddScoped<BillCardBuilder>();
 builder.Services.AddScoped<DraftCardBuilder>();
 builder.Services.AddScoped<ReminderService>();
 builder.Services.AddScoped<WebhookProcessor>();
+builder.Services.AddSingleton<LocationRequests>();
 
 var app = builder.Build();
 

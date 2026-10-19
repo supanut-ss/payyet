@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using PayYet.Config;
 using PayYet.Controllers;
+using PayYet.Services;
 
 namespace PayYet.Tests;
 
@@ -14,7 +15,7 @@ public class OwnTracksTests : DbTestBase
     private OwnTracksController NewController(string token, Action<HttpRequest>? setup = null)
     {
         var settings = new AppSettings { OwnTracks = { Token = token } };
-        var c = new OwnTracksController(Microsoft.Extensions.Options.Options.Create(settings), Db)
+        var c = new OwnTracksController(Microsoft.Extensions.Options.Options.Create(settings), Db, new PayYet.Services.LocationRequests())
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
         };
@@ -92,7 +93,7 @@ public class OwnTracksLatestTests : DbTestBase
 {
     private OwnTracksController NewController(string query = "?key=secret")
     {
-        var c = new OwnTracksController(Microsoft.Extensions.Options.Options.Create(new AppSettings { OwnTracks = { Token = "secret" } }), Db)
+        var c = new OwnTracksController(Microsoft.Extensions.Options.Options.Create(new AppSettings { OwnTracks = { Token = "secret" } }), Db, new PayYet.Services.LocationRequests())
         {
             ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
         };
@@ -137,5 +138,113 @@ public class OwnTracksLatestTests : DbTestBase
     public async Task A_wrong_key_is_refused()
     {
         Assert.IsType<UnauthorizedResult>(await NewController("?key=nope").Latest(null));
+    }
+}
+
+public class OwnTracksDeleteTests : DbTestBase
+{
+    private OwnTracksController NewController(string query)
+    {
+        var c = new OwnTracksController(Microsoft.Extensions.Options.Options.Create(new AppSettings { OwnTracks = { Token = "secret" } }), Db, new PayYet.Services.LocationRequests())
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
+        };
+        c.Request.QueryString = new QueryString(query);
+        return c;
+    }
+
+    private async Task Seed()
+    {
+        var t = DateTime.UtcNow;
+        foreach (var n in new[] { "test", "test", "mama" })
+            Db.LocationPings.Add(new PayYet.Data.LocationPing { Name = n, Lat = 1, Lon = 2, RecordedAt = t, ReceivedAt = t });
+        await Db.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task Deletes_only_the_named_persons_pings()
+    {
+        await Seed();
+
+        var ok = Assert.IsType<OkObjectResult>(await NewController("?key=secret&name=test").DeletePerson("test"));
+
+        Assert.Contains("deleted = 2", ok.Value!.ToString());
+        Assert.Equal("mama", (await Db.LocationPings.SingleAsync()).Name);
+    }
+
+    [Fact]
+    public async Task A_missing_name_or_wrong_key_deletes_nothing()
+    {
+        await Seed();
+
+        Assert.IsType<BadRequestObjectResult>(await NewController("?key=secret").DeletePerson(null));
+        Assert.IsType<UnauthorizedResult>(await NewController("?key=nope&name=test").DeletePerson("test"));
+        Assert.Equal(3, await Db.LocationPings.CountAsync());
+    }
+}
+
+public class OwnTracksRequestTests : DbTestBase
+{
+    private readonly LocationRequests _requests = new();
+
+    private OwnTracksController NewController(string query = "?key=secret", string? user = null)
+    {
+        var c = new OwnTracksController(Microsoft.Extensions.Options.Options.Create(new AppSettings { OwnTracks = { Token = "secret" } }), Db, _requests)
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
+        };
+        c.Request.QueryString = new QueryString(query);
+        if (user != null) c.Request.Headers["X-Limit-U"] = user;
+        return c;
+    }
+
+    private static JsonElement Json(string s) => JsonDocument.Parse(s).RootElement;
+
+    private async Task SeedPing(string name)
+    {
+        Db.LocationPings.Add(new PayYet.Data.LocationPing { Name = name, Lat = 1, Lon = 2, RecordedAt = DateTime.UtcNow, ReceivedAt = DateTime.UtcNow });
+        await Db.SaveChangesAsync();
+    }
+
+    [Fact]
+    public async Task A_request_is_handed_to_that_phone_once_in_the_reply_to_its_next_post()
+    {
+        await SeedPing("mama");
+
+        Assert.IsType<OkObjectResult>(await NewController().RequestLocation("mama"));
+
+        // someone else posting gets nothing
+        var other = Assert.IsType<OkObjectResult>(await NewController(user: "papa").Receive(Json("""{"_type":"location","lat":1,"lon":2}""")));
+        Assert.Empty((object[])other.Value!);
+
+        var first = Assert.IsType<OkObjectResult>(await NewController(user: "mama").Receive(Json("""{"_type":"location","lat":1,"lon":2}""")));
+        Assert.Contains("reportLocation", JsonSerializer.Serialize(first.Value));
+        var second = Assert.IsType<OkObjectResult>(await NewController(user: "mama").Receive(Json("""{"_type":"location","lat":1,"lon":2}""")));
+        Assert.Empty((object[])second.Value!);
+    }
+
+    [Fact]
+    public async Task The_command_is_also_delivered_on_non_location_messages_and_latest_shows_it_pending()
+    {
+        await SeedPing("mama");
+        await NewController().RequestLocation("mama");
+
+        var latest = Assert.IsType<OkObjectResult>(await NewController().Latest(null));
+        Assert.True(JsonDocument.Parse(JsonSerializer.Serialize(latest.Value)).RootElement[0].GetProperty("requested").GetBoolean());
+
+        var reply = Assert.IsType<OkObjectResult>(await NewController(user: "mama").Receive(Json("""{"_type":"lwt"}""")));
+        Assert.Contains("reportLocation", JsonSerializer.Serialize(reply.Value));
+        Assert.False(_requests.IsPending("mama"));
+    }
+
+    [Fact]
+    public async Task Unknown_names_missing_names_and_wrong_keys_are_refused()
+    {
+        await SeedPing("mama");
+
+        Assert.IsType<NotFoundResult>(await NewController().RequestLocation("ghost"));
+        Assert.IsType<BadRequestObjectResult>(await NewController().RequestLocation(null));
+        Assert.IsType<UnauthorizedResult>(await NewController("?key=nope").RequestLocation("mama"));
+        Assert.False(_requests.IsPending("mama"));
     }
 }
