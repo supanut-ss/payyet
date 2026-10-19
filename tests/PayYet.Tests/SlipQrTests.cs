@@ -25,7 +25,7 @@ public class SlipQrTests
     private static SlipQrVerifier Verifier(bool requireQr = false, int maxAgeDays = 7) =>
         new(Options.Create(new AppSettings { SlipVerify = { QrCheck = true, RequireQr = requireQr, MaxAgeDays = maxAgeDays } }));
 
-    private static string RefFor(DateOnly day) => day.ToString("yyyyMMdd") + "123456ABCD";
+    private static string RefFor(DateOnly day) => day.ToString("yyyyMMdd", System.Globalization.CultureInfo.InvariantCulture) + "123456ABCD";
 
     [Fact]
     public void A_valid_slip_qr_gives_bank_and_reference()

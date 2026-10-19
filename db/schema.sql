@@ -141,3 +141,17 @@ CREATE TABLE recurring_bills (
   CONSTRAINT fk_rec_creator FOREIGN KEY (creator_id) REFERENCES users(id),
   CONSTRAINT fk_rec_group   FOREIGN KEY (group_id)   REFERENCES `groups`(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- OwnTracks family location tracking: see db/migrations/2026-10-19-location-pings.sql
+CREATE TABLE location_pings (
+  id           BIGINT AUTO_INCREMENT PRIMARY KEY,
+  name         VARCHAR(64)  NOT NULL,
+  device       VARCHAR(64)  NULL,
+  lat          DOUBLE       NOT NULL,
+  lon          DOUBLE       NOT NULL,
+  accuracy     INT          NULL,
+  battery      INT          NULL,
+  recorded_at  DATETIME(3)  NOT NULL,
+  received_at  DATETIME(3)  NOT NULL,
+  KEY ix_ping_name_time (name, recorded_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

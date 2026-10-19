@@ -155,3 +155,17 @@ public class ProcessedEvent
     public string WebhookEventId { get; set; } = "";
     public DateTime ProcessedAt { get; set; }
 }
+
+// One position report from an OwnTracks phone (family location tracking).
+public class LocationPing
+{
+    public long Id { get; set; }
+    public string Name { get; set; } = "";             // person: X-Limit-U header, else tracker id (tid)
+    public string? Device { get; set; }                // X-Limit-D header
+    public double Lat { get; set; }
+    public double Lon { get; set; }
+    public int? Accuracy { get; set; }                 // metres
+    public int? Battery { get; set; }                  // percent
+    public DateTime RecordedAt { get; set; }           // UTC, from the phone (tst)
+    public DateTime ReceivedAt { get; set; }
+}

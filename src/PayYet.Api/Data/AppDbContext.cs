@@ -15,6 +15,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<ConversationState> States => Set<ConversationState>();
     public DbSet<ProcessedEvent> ProcessedEvents => Set<ProcessedEvent>();
     public DbSet<RecurringBill> RecurringBills => Set<RecurringBill>();
+    public DbSet<LocationPing> LocationPings => Set<LocationPing>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder b)
     {
@@ -43,6 +44,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
             e.HasIndex(x => x.ScopeKey).IsUnique();
             e.HasOne(x => x.Creator).WithMany().HasForeignKey(x => x.CreatorId);
             e.HasOne(x => x.Group).WithMany().HasForeignKey(x => x.GroupId);
+        });
+
+        m.Entity<LocationPing>(e =>
+        {
+            e.ToTable("location_pings");
+            e.HasIndex(x => new { x.Name, x.RecordedAt });
         });
 
         m.Entity<RecurringBill>(e =>

@@ -7,6 +7,7 @@ public class AppSettings
     public LiffSection Liff { get; set; } = new();
     public AppSection App { get; set; } = new();
     public JobsSection Jobs { get; set; } = new();
+    public OwnTracksSection OwnTracks { get; set; } = new();
     public SlipVerifySection SlipVerify { get; set; } = new();
 }
 
@@ -51,4 +52,9 @@ public class JobsSection
 {
     public string Key { get; set; } = "";
     public int ReminderHour { get; set; } = 10;        // Asia/Bangkok
+}
+
+public class OwnTracksSection
+{
+    public string Token { get; set; } = "";            // shared secret: OwnTracks "password" (HTTP Basic) or ?key=
 }
