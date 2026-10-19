@@ -167,8 +167,8 @@
   .final h2 { margin:0 0 8px; } .final p { font-size:18px; margin-bottom:22px; opacity:.85; }
   .final .cta { justify-content:center; margin:0; }
   .final .addqr { margin:26px auto 0; width:max-content; max-width:100%; }
-  .final .addqr img { display:block; width:168px; height:168px; background:#fff; border-radius:18px; padding:8px; box-shadow:0 6px 18px rgba(0,0,0,.18); }
-  .final .addqr figcaption { margin-top:10px; font-size:14px; opacity:.85; }
+  .final .addqr img { display:block; margin:0 auto; width:168px; height:168px; background:#fff; border-radius:18px; padding:8px; box-shadow:0 6px 18px rgba(0,0,0,.18); }
+  .final .addqr figcaption { margin:10px auto 0; max-width:260px; text-align:center; font-size:14px; line-height:1.5; opacity:.85; }
   .final .btn.ghost { color:var(--onbrand); border-color:rgba(43,20,0,.35); }
   footer { padding:26px 0 40px; color:var(--muted); font-size:13px; text-align:center; }
 
@@ -204,6 +204,8 @@
             background:color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter:blur(12px); border-top:1px solid var(--line); }
     .dock .btn { flex:1; min-height:52px; }
     .dock .btn.share { flex:0 0 56px; padding:0; }
+    .dock { transition:transform .25s ease; }
+    .dock.away { transform:translateY(110%); }   /* the invite section already shows the same buttons */
     .top .btn { display:none; }
   }
   @media (prefers-reduced-motion:reduce) {
@@ -377,7 +379,7 @@
         </div>
         <figure class="addqr">
           <img src="img/add-friend-qr.png" width="168" height="168" alt="QR สำหรับเพิ่มเพื่อน LINE PayYet">
-          <figcaption>สแกนด้วยกล้องหรือ LINE เพื่อเพิ่มเพื่อน · @128cbqvp</figcaption>
+          <figcaption>สแกน QR เพื่อเพิ่มเพื่อน<br>@128cbqvp</figcaption>
         </figure>
       </div>
     </div>
@@ -409,6 +411,13 @@
   fetch('https://api.drivetodev.online/api/pay/config').then(function (r) { return r.json(); }).then(function (c) {
     if (c && /^https:\/\/(line\.me|lin\.ee)\//.test(c.oaUrl || '')) showAdd(c.oaUrl);
   }).catch(function () {});
+
+  // Hide the bottom dock while the invite section (same buttons) is on screen, so they are not shown twice.
+  (function () {
+    var dock = document.querySelector('.dock'), box = document.querySelector('.final .box');
+    if (!dock || !box || !('IntersectionObserver' in window)) return;
+    new IntersectionObserver(function (es) { dock.classList.toggle('away', es[0].isIntersecting); }, { threshold: .25 }).observe(box);
+  })();
 
   // Invite a friend: native share sheet when available, otherwise copy the link.
   document.querySelectorAll('[data-share]').forEach(function (b) {
