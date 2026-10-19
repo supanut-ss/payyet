@@ -19,6 +19,7 @@ public class OwnTracksController(IOptions<AppSettings> options, AppDbContext db,
     // Auth: the token as the HTTP Basic password, or as ?key= (OwnTracks lets the URL carry a query string).
     // The person is the X-Limit-U header (OwnTracks "username"), falling back to the tracker id.
     [HttpPost("owntracks")]
+    [RequestSizeLimit(16 * 1024)]   // a position report is tiny; refuse big bodies before they are parsed
     public async Task<IActionResult> Receive([FromBody] JsonElement body)
     {
         var expected = options.Value.OwnTracks.Token;
@@ -34,6 +35,10 @@ public class OwnTracksController(IOptions<AppSettings> options, AppDbContext db,
 
         var now = DateTime.UtcNow;
         var recorded = Num(body, "tst", out var tst) && tst > 0 && tst < 4_102_444_800 ? DateTimeOffset.FromUnixTimeSeconds((long)tst).UtcDateTime : now;
+
+        // OwnTracks re-sends a report after a flaky connection; the same person + moment + place is stored once.
+        if (await db.LocationPings.AnyAsync(p => p.Name == name && p.RecordedAt == recorded && p.Lat == lat && p.Lon == lon))
+            return Ok(CommandsFor(name));
 
         db.LocationPings.Add(new LocationPing
         {
@@ -74,11 +79,17 @@ public class OwnTracksController(IOptions<AppSettings> options, AppDbContext db,
         if (string.IsNullOrEmpty(expected)) return StatusCode(503, "OwnTracks:Token is not configured");
         if (!TokenMatches(expected)) return Unauthorized();
 
-        var latest = db.LocationPings.Where(p => p.Id == db.LocationPings
-            .Where(q => q.Name == p.Name).OrderByDescending(q => q.RecordedAt).ThenByDescending(q => q.Id).Select(q => q.Id).First());
-        if (!string.IsNullOrWhiteSpace(name)) { var n = name.Trim(); latest = latest.Where(p => p.Name == n); }
-
-        var rows = await latest.OrderBy(p => p.Name).ToListAsync();
+        // One indexed lookup (name, recorded_at) per person: cheap however many pings are stored.
+        var names = string.IsNullOrWhiteSpace(name)
+            ? await db.LocationPings.Select(p => p.Name).Distinct().OrderBy(n => n).ToListAsync()
+            : [name.Trim()];
+        var rows = new List<LocationPing>();
+        foreach (var person in names)
+        {
+            var newest = await db.LocationPings.Where(p => p.Name == person)
+                .OrderByDescending(p => p.RecordedAt).ThenByDescending(p => p.Id).FirstOrDefaultAsync();
+            if (newest != null) rows.Add(newest);
+        }
         return Ok(rows.Select(p => new
         {
             name = p.Name,

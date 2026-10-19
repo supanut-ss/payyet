@@ -308,3 +308,62 @@ public class OwnTracksHistoryTests : DbTestBase
         Assert.IsType<UnauthorizedResult>(await NewController("?key=nope").History("mama", "2026-10-19"));
     }
 }
+
+public class OwnTracksHardeningTests : DbTestBase
+{
+    private OwnTracksController NewController(string? user = null)
+    {
+        var c = new OwnTracksController(Microsoft.Extensions.Options.Options.Create(new AppSettings { OwnTracks = { Token = "secret" } }), Db, new LocationRequests())
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext() }
+        };
+        c.Request.QueryString = new QueryString("?key=secret");
+        if (user != null) c.Request.Headers["X-Limit-U"] = user;
+        return c;
+    }
+
+    [Fact]
+    public async Task The_same_report_sent_twice_is_stored_once()
+    {
+        var body = JsonDocument.Parse("""{"_type":"location","lat":13.7,"lon":100.5,"tst":1760000000}""").RootElement;
+
+        await NewController("mama").Receive(body);
+        await NewController("mama").Receive(body);
+        await NewController("papa").Receive(body);   // another person with the same moment is a different report
+
+        Assert.Equal(2, await Db.LocationPings.CountAsync());
+    }
+
+    [Fact]
+    public async Task Latest_returns_the_newest_ping_per_person_even_with_many_old_pings()
+    {
+        var t = new DateTime(2026, 10, 19, 1, 0, 0, DateTimeKind.Utc);
+        for (var i = 0; i < 200; i++)
+        {
+            Db.LocationPings.Add(new PayYet.Data.LocationPing { Name = "mama", Lat = i, Lon = 1, RecordedAt = t.AddMinutes(i), ReceivedAt = t });
+            Db.LocationPings.Add(new PayYet.Data.LocationPing { Name = "papa", Lat = -i, Lon = 1, RecordedAt = t.AddMinutes(i), ReceivedAt = t });
+        }
+        await Db.SaveChangesAsync();
+
+        var ok = Assert.IsType<OkObjectResult>(await NewController().Latest(null));
+
+        var rows = JsonDocument.Parse(JsonSerializer.Serialize(ok.Value)).RootElement.EnumerateArray().ToList();
+        Assert.Equal(new[] { "mama", "papa" }, rows.Select(r => r.GetProperty("name").GetString()!).ToArray());
+        Assert.Equal(199, rows[0].GetProperty("lat").GetDouble());
+        Assert.Equal(-199, rows[1].GetProperty("lat").GetDouble());
+    }
+
+    [Fact]
+    public async Task Retention_purges_only_pings_older_than_the_limit()
+    {
+        var now = new DateTime(2026, 10, 19, 0, 0, 0, DateTimeKind.Utc);
+        Db.LocationPings.Add(new PayYet.Data.LocationPing { Name = "old", Lat = 1, Lon = 1, RecordedAt = now, ReceivedAt = now.AddDays(-91) });
+        Db.LocationPings.Add(new PayYet.Data.LocationPing { Name = "new", Lat = 1, Lon = 1, RecordedAt = now, ReceivedAt = now.AddDays(-89) });
+        await Db.SaveChangesAsync();
+
+        Assert.Equal(0, await LocationRetention.PurgeAsync(Db, 0, now));   // 0 keeps everything
+        Assert.Equal(1, await LocationRetention.PurgeAsync(Db, 90, now));
+
+        Assert.Equal("new", (await Db.LocationPings.SingleAsync()).Name);
+    }
+}
