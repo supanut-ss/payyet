@@ -93,6 +93,7 @@ CREATE TABLE payments (
   bill_item_id   BIGINT       NOT NULL,
   slip_path      VARCHAR(255) NOT NULL,         -- relative to App_Data/slips
   slip_ref       VARCHAR(64)  NULL,
+  batch_id       VARCHAR(32)  NULL,         -- payments made with the same slip (several bills at once)
   slip_hash      CHAR(64)     NOT NULL,         -- SHA-256, blocks identical re-uploads
   media_token    VARCHAR(48)  NOT NULL,         -- random token for the public slip image URL
   amount_satang  BIGINT       NOT NULL,

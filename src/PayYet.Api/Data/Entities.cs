@@ -136,6 +136,7 @@ public class Payment
     public string MediaToken { get; set; } = "";
     public long AmountSatang { get; set; }
     public string? VerifiedBy { get; set; }
+    public string? BatchId { get; set; }                // one slip paying several bills: all its payments share this id
     public PaymentStatus Status { get; set; } = PaymentStatus.SUBMITTED;
     public DateTime CreatedAt { get; set; }
 }

@@ -96,6 +96,89 @@ public class PayController(AppDbContext db, LineClient line, PaymentService paym
     [HttpGet("config")]
     public IActionResult Config() => Ok(new { liffId = options.Value.Liff.Id, oaUrl = options.Value.App.LineOaUrl });
 
+    // ---- paying several bills with one transfer ----
+
+    public record QrRequest(List<string>? BillTokens, decimal? Amount);
+
+    /// <summary>Everything the signed-in user still owes, bill by bill, grouped by collector on the page (one transfer pays one collector).</summary>
+    [HttpGet("owed")]
+    public async Task<IActionResult> Owed()
+    {
+        var who = await Authenticate();
+        if (who == null) return Unauthorized(new { error = "เข้าสู่ระบบไม่สำเร็จ ลองเปิดจากแอป LINE อีกครั้ง" });
+
+        var items = await db.BillItems
+            .Include(i => i.Bill).ThenInclude(b => b.Creator).Include(i => i.Bill).ThenInclude(b => b.Group)
+            .Where(i => i.Debtor!.LineUserId == who.Value.UserId && i.Bill.Status == BillStatus.OPEN)
+            .OrderBy(i => i.Bill.CreatorId).ThenBy(i => i.BillId).ToListAsync();
+        items = items.Where(i => !i.IsSettled).ToList();
+        return Ok(items.Select(i => new
+        {
+            billToken = i.Bill.Token,
+            billId = i.BillId,
+            title = i.Bill.Title,
+            groupName = i.Bill.Group?.Name,
+            collectorId = i.Bill.CreatorId,
+            collector = i.Bill.Creator.Name,
+            collectorPictureUrl = string.IsNullOrEmpty(i.Bill.Creator.PictureUrl) ? null : i.Bill.Creator.PictureUrl,
+            amountSatang = i.AmountSatang,
+            paidSatang = i.PaidSatang,
+            remainingSatang = i.Remaining,
+            status = i.Status.ToString()
+        }));
+    }
+
+    /// <summary>The PromptPay QR for the selected bills: the sum of what is still owed on them (or a partial amount for a single bill).</summary>
+    [HttpPost("qr")]
+    public async Task<IActionResult> Qr([FromBody] QrRequest req)
+    {
+        var who = await Authenticate();
+        if (who == null) return Unauthorized(new { error = "เข้าสู่ระบบไม่สำเร็จ ลองเปิดจากแอป LINE อีกครั้ง" });
+
+        var tokens = (req.BillTokens ?? new List<string>()).Distinct().ToList();
+        if (tokens.Count == 0) return BadRequest(new { error = "ยังไม่ได้เลือกบิล" });
+        var items = await db.BillItems.Include(i => i.Bill).ThenInclude(b => b.Creator)
+            .Where(i => tokens.Contains(i.Bill.Token) && i.Debtor!.LineUserId == who.Value.UserId).ToListAsync();
+        if (items.Count != tokens.Count) return StatusCode(403, new { error = "คุณไม่อยู่ในบิลที่เลือก" });
+        if (items.Select(i => i.Bill.CreatorId).Distinct().Count() > 1) return BadRequest(new { error = "โอนครั้งเดียวจ่ายได้เฉพาะบิลของผู้เก็บคนเดียวกัน" });
+        if (items.Any(i => i.Bill.Status != BillStatus.OPEN || i.IsSettled)) return BadRequest(new { error = "มีบิลที่ปิดหรือจ่ายครบแล้ว" });
+
+        var total = items.Sum(i => i.Remaining);
+        var amount = total;
+        if (items.Count == 1 && req.Amount is > 0)
+        {
+            amount = Money.ToSatang(req.Amount.Value);
+            if (amount > total) return BadRequest(new { error = $"ยอดเกินที่ค้างอยู่ (฿{Money.Format(total)})" });
+        }
+
+        var creator = items[0].Bill.Creator;
+        string? qr = null;
+        if (!string.IsNullOrEmpty(creator.PromptPayId) && amount > 0)
+        {
+            using var gen = new QRCoder.QRCodeGenerator();
+            var data = gen.CreateQrCode(PromptPay.Payload(creator.PromptPayId, amount), QRCoder.QRCodeGenerator.ECCLevel.M);
+            qr = "data:image/png;base64," + Convert.ToBase64String(new QRCoder.PngByteQRCode(data).GetGraphic(8));
+        }
+        return Ok(new { collector = creator.Name, count = items.Count, totalSatang = total, amountSatang = amount, qr });
+    }
+
+    /// <summary>One slip for one or several bills of the same collector.</summary>
+    [HttpPost("slip-batch")]
+    [RequestSizeLimit(8 * 1024 * 1024)]
+    public async Task<IActionResult> SlipBatch([FromForm] string billTokens, [FromForm] decimal amount, IFormFile? file)
+    {
+        var who = await Authenticate();
+        if (who == null) return Unauthorized(new { error = "เข้าสู่ระบบไม่สำเร็จ ลองเปิดจากแอป LINE อีกครั้ง" });
+        if (file == null || file.Length == 0) return BadRequest(new { error = "กรุณาแนบรูปสลิป" });
+        if (file.Length > PaymentService.MaxSlipBytes) return BadRequest(new { error = "ไฟล์ใหญ่เกิน 5 MB" });
+
+        using var ms = new MemoryStream();
+        await file.CopyToAsync(ms);
+        var tokens = (billTokens ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var (ok, message) = await payments.SubmitSlipBatchAsync(who.Value.UserId, tokens, Money.ToSatang(amount), ms.ToArray());
+        return ok ? Ok(new { message }) : BadRequest(new { error = message });
+    }
+
     [HttpGet("{billToken}")]
     public async Task<IActionResult> Get(string billToken)
     {

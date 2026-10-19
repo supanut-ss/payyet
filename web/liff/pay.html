@@ -213,59 +213,111 @@
     }).catch(function () { return file; });
   }
 
-  // ───────── pay page (opened from a bill card) ─────────
-  function render() {
-    var d = state, nodes = [];
-    bar('จ่ายเงิน');
-    nodes.push(el('div', { class: 'card' }, [
-      el('div', { class: 'muted small', text: 'จ่ายให้ ' + d.collector + ' · ' + d.title }),
-      el('div', { class: 'amount', text: '฿' + baht(d.remainingSatang) }),
-      el('div', { class: 'muted small', text: d.paidSatang > 0 ? 'ยอดรวม ฿' + baht(d.amountSatang) + ' · จ่ายแล้ว ฿' + baht(d.paidSatang) : 'ยอดที่ต้องจ่าย' })
-    ]));
+  // ───────── pay page (opened from a bill card): every bill I owe, pick which ones to pay now ─────────
+  var pay = { items: [], selected: {}, note: null };
 
-    if (d.charges && d.charges.length > 1) {
-      nodes.push(el('div', { class: 'card' }, d.charges.map(function (c) {
-        return el('div', { class: 'row' }, [el('span', { text: c.title }), el('span', { text: '฿' + baht(c.total) })]);
-      })));
-    }
-
-    if (d.remainingSatang <= 0) {
-      nodes.push(el('div', { class: 'msg ok', text: '✅ คุณจ่ายครบแล้ว ขอบคุณครับ' }));
-    } else if (d.billStatus !== 'OPEN') {
-      nodes.push(el('div', { class: 'msg err', text: 'บิลนี้ปิดแล้ว' }));
-    } else {
-      if (d.qr) {
-        nodes.push(el('div', { class: 'card' }, [
-          el('div', { class: 'muted small', text: 'สแกนด้วยแอปธนาคาร (กดค้างที่รูปเพื่อบันทึก QR)' }),
-          el('img', { class: 'qr', src: d.qr, alt: 'PromptPay QR' })
-        ]));
+  function load() {
+    return api(API + 'api/pay/owed').then(function (list) {
+      var firstLoad = pay.items.length === 0 && Object.keys(pay.selected).length === 0;
+      pay.items = list;
+      // keep only selections that are still payable
+      Object.keys(pay.selected).forEach(function (t) {
+        if (!list.some(function (i) { return i.billToken === t && i.status !== 'SUBMITTED'; })) delete pay.selected[t];
+      });
+      if (firstLoad) {
+        // start with every bill of the collector whose bill was opened (one transfer pays one collector)
+        var opened = list.filter(function (i) { return i.billToken === billToken; })[0];
+        if (opened) list.forEach(function (i) { if (i.collectorId === opened.collectorId && i.status !== 'SUBMITTED') pay.selected[i.billToken] = true; });
       }
-      if (d.itemStatus === 'SUBMITTED') {
-        nodes.push(el('div', { class: 'msg ok', text: '⏳ ส่งสลิปแล้ว รอผู้เก็บตรวจสอบ' }));
-        if (payNotice) nodes.push(el('div', { class: 'msg err', text: payNotice }));
-      }
-      else nodes.push(uploadCard(d));
-    }
-
-    if (d.payments && d.payments.length) {
-      nodes.push(el('div', { class: 'card' }, [el('div', { class: 'muted small', text: 'ประวัติการส่งสลิป' })].concat(
-        d.payments.map(function (p) {
-          var label = { SUBMITTED: 'รอตรวจ', APPROVED: 'ยืนยันแล้ว', REJECTED: 'ไม่ยืนยัน' }[p.status] || p.status;
-          return el('div', { class: 'row' }, [el('span', { text: '฿' + baht(p.amountSatang) }), el('span', { class: 'small status-' + p.status, text: label })]);
-        }))));
-    }
-    show(nodes);
+      renderPay();
+    });
   }
 
-  function uploadCard(d) {
-    var amount = el('input', { type: 'number', class: 'inp', inputmode: 'decimal', step: '0.01', min: '0.01', value: (d.remainingSatang / 100).toFixed(2) });
+  function sumOf(filterFn) { return pay.items.filter(filterFn).reduce(function (t, i) { return t + i.remainingSatang; }, 0); }
+  function chosen() { return pay.items.filter(function (i) { return pay.selected[i.billToken]; }); }
+
+  function renderPay() {
+    bar('จ่ายเงิน');
+    var nodes = [];
+    var items = pay.items;
+    var totalAll = sumOf(function () { return true; });
+
+    if (!items.length) {
+      nodes.push(el('div', { class: 'msg ok', text: '✅ ไม่มีบิลค้างจ่าย ขอบคุณครับ' }));
+      if (pay.note) nodes.push(el('div', { class: 'msg ok', text: pay.note }));
+      show(nodes);
+      return;
+    }
+
+    nodes.push(el('div', { class: 'card' }, [
+      el('div', { class: 'row' }, [el('span', { class: 'muted small', text: 'ยอดค้างทั้งหมด · ' + items.length + ' บิล' }), el('strong', { text: money(totalAll) })]),
+      el('div', { class: 'muted small', text: 'เลือกบิลที่จะจ่ายตอนนี้ (โอนหนึ่งครั้งจ่ายได้เฉพาะบิลของผู้เก็บคนเดียวกัน)' })
+    ]));
+
+    // one card per collector
+    var byCollector = {};
+    items.forEach(function (i) { (byCollector[i.collectorId] = byCollector[i.collectorId] || []).push(i); });
+    Object.keys(byCollector).forEach(function (cid) {
+      var list = byCollector[cid];
+      var rows = list.map(function (i) {
+        var waiting = i.status === 'SUBMITTED';
+        var cb = el('input', { type: 'checkbox' });
+        cb.checked = !!pay.selected[i.billToken];
+        cb.disabled = waiting;
+        cb.addEventListener('change', function () {
+          if (cb.checked) {
+            // a different collector is a different transfer: switch the selection to this collector
+            Object.keys(pay.selected).forEach(function (t) {
+              var other = pay.items.filter(function (x) { return x.billToken === t; })[0];
+              if (other && other.collectorId !== i.collectorId) delete pay.selected[t];
+            });
+            pay.selected[i.billToken] = true;
+          } else delete pay.selected[i.billToken];
+          pay.note = null;
+          renderPay();
+        });
+        var sub = (i.groupName ? i.groupName : 'ส่วนตัว') + (i.paidSatang > 0 ? ' · จ่ายแล้ว ' + money(i.paidSatang) + ' จาก ' + money(i.amountSatang) : '');
+        return el('label', { class: 'li' }, [cb,
+          el('span', { class: 'grow' }, [el('strong', { text: i.title }), el('span', { class: 'muted block', text: sub })]),
+          waiting ? pill('รอตรวจสลิป', 'wait') : el('strong', { text: money(i.remainingSatang) })]);
+      });
+      nodes.push(el('div', { class: 'card' }, [
+        el('div', { class: 'li', style: 'padding-top:0' }, [avatar(list[0].collectorPictureUrl, list[0].collector, false),
+          el('span', { class: 'grow' }, [el('strong', { text: 'จ่ายให้ ' + list[0].collector }),
+            el('span', { class: 'muted block', text: list.length + ' บิล · รวม ' + money(list.reduce(function (t, i) { return t + i.remainingSatang; }, 0)) })])])
+      ].concat(rows)));
+    });
+
+    nodes.push(payBox());
+    if (pay.note) nodes.push(el('div', { class: 'msg ok', text: pay.note }));
+    show(nodes);
+    refreshQr();
+  }
+
+  // Selected total, the QR for it, and the slip upload.
+  var qrBox = null, amountInput = null, qrTimer = null;
+
+  function payBox() {
+    var sel = chosen();
+    var total = sel.reduce(function (t, i) { return t + i.remainingSatang; }, 0);
+    qrBox = el('div', { class: 'muted small pad', text: sel.length ? 'กำลังสร้าง QR…' : '' });
+
+    var head = el('div', { class: 'row' }, [
+      el('span', { class: 'muted small', text: sel.length ? 'ยอดที่เลือก ' + sel.length + ' บิล' : 'ยังไม่ได้เลือกบิล' }),
+      el('span', { class: 'amount', style: 'margin:0', text: money(total) })]);
+    if (!sel.length) return el('div', { class: 'card' }, [head]);
+
+    amountInput = el('input', { type: 'number', class: 'inp', inputmode: 'decimal', step: '0.01', min: '0.01', value: (total / 100).toFixed(2) });
+    if (sel.length > 1) { amountInput.disabled = true; }       // several bills: pay exactly what they sum to
+    else amountInput.addEventListener('input', function () { clearTimeout(qrTimer); qrTimer = setTimeout(refreshQr, 400); });
+
     var file = el('input', { type: 'file', accept: 'image/*', class: 'hid' });
     var pickLabel = el('span', { text: 'แนบสลิป' });
-    var pick = el('button', { class: 'chip', type: 'button' }, [icon('camera'), pickLabel]);
-    pick.addEventListener('click', function () { file.click(); });
+    var pickBtn = el('button', { class: 'chip', type: 'button' }, [icon('camera'), pickLabel]);
+    pickBtn.addEventListener('click', function () { file.click(); });
     file.addEventListener('change', function () {
       pickLabel.textContent = file.files && file.files[0] ? 'เลือกรูปแล้ว' : 'แนบสลิป';
-      pick.classList.toggle('ok', !!(file.files && file.files[0]));
+      pickBtn.classList.toggle('ok', !!(file.files && file.files[0]));
     });
     var out = el('div');
     var btn = el('button', { class: 'cta', type: 'button' }, [icon('send'), el('span', { text: 'ส่งสลิป' })]);
@@ -275,30 +327,46 @@
       var f = file.files && file.files[0];
       if (!f) { out.appendChild(el('div', { class: 'msg err', text: 'กรุณาแนบรูปสลิปก่อน' })); return; }
       btn.disabled = true; btnText.textContent = 'กำลังส่ง…';
+      var tokens = chosen().map(function (i) { return i.billToken; });
       shrink(f).then(function (blob) {
         var fd = new FormData();
-        fd.append('billToken', billToken);
-        fd.append('amount', amount.value);
+        fd.append('billTokens', tokens.join(','));
+        fd.append('amount', amountInput.value);
         fd.append('file', blob, 'slip.jpg');
-        return api(API + 'api/pay/slip', { method: 'POST', body: fd });
-      }).then(function (r) { payNotice = r && r.message && r.message.indexOf('⚠️') === 0 ? r.message : null; return load(); })
-        .catch(function (e) {
-          btn.disabled = false; btnText.textContent = 'ส่งสลิป';
-          out.appendChild(el('div', { class: 'msg err', text: e.message }));
-        });
+        return api(API + 'api/pay/slip-batch', { method: 'POST', body: fd });
+      }).then(function (r) {
+        pay.selected = {};
+        pay.note = (r && r.message) || 'ส่งสลิปแล้ว รอผู้เก็บตรวจสอบ';
+        return load();
+      }).catch(function (e) {
+        btn.disabled = false; btnText.textContent = 'ส่งสลิป';
+        out.appendChild(el('div', { class: 'msg err', text: e.message }));
+      });
     });
+
     return el('div', { class: 'card' }, [
-      el('div', { class: 'muted small', text: 'จ่ายเสร็จแล้ว แนบสลิปที่นี่' }),
-      el('label', { class: 'fld', text: 'ยอดที่โอน (บาท)' }), amount,
-      el('div', { class: 'sub' }, [pick, file]),
+      head,
+      el('div', { class: 'muted small', text: 'สแกนด้วยแอปธนาคาร (กดค้างที่รูปเพื่อบันทึก QR) ยอดถูกใส่ให้อัตโนมัติ' }),
+      qrBox,
+      el('label', { class: 'fld', text: sel.length > 1 ? 'ยอดที่โอน (บาท) = ยอดรวมของบิลที่เลือก' : 'ยอดที่โอน (บาท) จ่ายบางส่วนได้' }), amountInput,
+      el('div', { class: 'sub' }, [pickBtn, file]),
       btn, out
     ]);
   }
 
-  function load() {
-    return api(API + 'api/pay/' + encodeURIComponent(billToken)).then(function (d) {
-      state = d;
-      render();
+  function refreshQr() {
+    var sel = chosen();
+    if (!sel.length || !qrBox) return;
+    var body = { billTokens: sel.map(function (i) { return i.billToken; }) };
+    if (sel.length === 1 && amountInput && parseFloat(amountInput.value) > 0) body.amount = parseFloat(amountInput.value);
+    var box = qrBox;
+    post('api/pay/qr', body).then(function (r) {
+      if (box !== qrBox) return;      // the selection changed meanwhile
+      box.replaceChildren();
+      if (r.qr) box.appendChild(el('img', { class: 'qr', src: r.qr, alt: 'PromptPay QR' }));
+      else box.appendChild(el('div', { class: 'msg err', text: 'ผู้เก็บยังไม่ได้ตั้งพร้อมเพย์ ติดต่อผู้เก็บโดยตรง' }));
+    }).catch(function (e) {
+      if (box === qrBox) box.replaceChildren(el('div', { class: 'msg err', text: e.message }));
     });
   }
 
