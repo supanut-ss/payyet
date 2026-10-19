@@ -26,7 +26,7 @@ public class LiffSection
 public class AppSection
 {
     public string PublicBaseUrl { get; set; } = "https://api.drivetodev.online";
-    public string WebBaseUrl { get; set; } = "https://payyet.drivetodev.online";   // static web app (landing + LIFF page); also the only CORS origin
+    public string WebBaseUrl { get; set; } = "https://drivetodev.online/payyet";   // static web app (landing + LIFF page); also the only CORS origin
     public string LineOaUrl { get; set; } = "";           // https://line.me/R/ti/p/@xxxx - shows the "add friend" button on the landing page
     public string PathBase { get; set; } = "";             // "" on a dedicated (sub)domain; "/lineapi" only when hosted in a sub-folder
 }

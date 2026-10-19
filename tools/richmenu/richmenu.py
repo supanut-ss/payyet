@@ -11,7 +11,7 @@ from PIL import Image, ImageDraw, ImageFont
 W, H = 2500, 1686
 FONT = r"C:\Windows\Fonts\tahomabd.ttf"  # supports Thai
 LIFF_BASE = "https://liff.line.me/{}".format(os.environ.get("LIFF_ID", "YOUR_LIFF_ID"))
-HELP_URL = "https://payyet.drivetodev.online/"   # landing page with every command and feature
+HELP_URL = "https://drivetodev.online/payyet/"   # landing page with every command and feature
 
 # (label, icon, bg color, x, y, w, h, action)
 TOP = 923  # matches the row split in design.webp

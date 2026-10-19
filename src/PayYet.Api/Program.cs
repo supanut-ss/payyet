@@ -13,8 +13,9 @@ builder.Configuration.AddJsonFile("appsettings.Production.json", optional: true,
 builder.Services.Configure<AppSettings>(builder.Configuration);
 builder.Services.AddControllers();
 
-// The web app lives on its own subdomain (App:WebBaseUrl) and calls this API from the browser.
-var webOrigin = (builder.Configuration["App:WebBaseUrl"] ?? "https://payyet.drivetodev.online").TrimEnd('/');
+// The web app (App:WebBaseUrl, may include a path such as https://drivetodev.online/payyet) calls this API from the browser.
+var webBase = (builder.Configuration["App:WebBaseUrl"] ?? "https://drivetodev.online/payyet").TrimEnd('/');
+var webOrigin = new Uri(webBase).GetLeftPart(UriPartial.Authority);   // CORS origins carry no path
 builder.Services.AddCors(o => o.AddDefaultPolicy(p => p
     .WithOrigins(webOrigin)
     .WithHeaders("Authorization", "Content-Type")
@@ -70,7 +71,7 @@ app.MapGet("/health", async (AppDbContext db, SlipAmountChecker ocr) =>
 
 // The LIFF page moved to the web app; keep old LIFF endpoint links working (query string, incl. liff.state, is preserved).
 app.MapGet("/liff/pay", (HttpContext ctx) =>
-    Results.Redirect($"{webOrigin}/liff/pay.html{ctx.Request.QueryString}"));
+    Results.Redirect($"{webBase}/liff/pay.html{ctx.Request.QueryString}"));
 
 app.Run();
 
