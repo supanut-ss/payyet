@@ -11,11 +11,12 @@ namespace PayYet.Line;
 public record LineProfile(string UserId, string? DisplayName, string? PictureUrl = null);
 
 /// <summary>Thin wrapper over the LINE Messaging API (no official .NET SDK).</summary>
-public class LineClient(HttpClient http, IOptions<AppSettings> options, ILogger<LineClient> log)
+public class LineClient(HttpClient http, IOptions<AppSettings> options, ILogger<LineClient> log, ILineTokenSource? tokens = null)
 {
     private const string Api = "https://api.line.me/v2/bot";
     private static readonly JsonSerializerOptions Json = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase, DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull };
     private LineSection Cfg => options.Value.Line;
+    private async Task<string> TokenAsync() => tokens != null ? await tokens.GetAsync() : Cfg.ChannelAccessToken;
 
     private string? _oaUrl;
 
@@ -114,7 +115,7 @@ public class LineClient(HttpClient http, IOptions<AppSettings> options, ILogger<
     private async Task<bool> PostAsync(string url, object body)
     {
         using var req = new HttpRequestMessage(HttpMethod.Post, url) { Content = JsonContent.Create(body, options: Json) };
-        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Cfg.ChannelAccessToken);
+        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", await TokenAsync());
         try
         {
             using var res = await http.SendAsync(req);
@@ -131,7 +132,7 @@ public class LineClient(HttpClient http, IOptions<AppSettings> options, ILogger<
     private async Task<JsonDocument?> GetJsonAsync(string url)
     {
         using var req = new HttpRequestMessage(HttpMethod.Get, url);
-        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", Cfg.ChannelAccessToken);
+        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", await TokenAsync());
         try
         {
             using var res = await http.SendAsync(req);

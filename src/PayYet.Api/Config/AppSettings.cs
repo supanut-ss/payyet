@@ -9,6 +9,7 @@ public class AppSettings
     public JobsSection Jobs { get; set; } = new();
     public OwnTracksSection OwnTracks { get; set; } = new();
     public SlipVerifySection SlipVerify { get; set; } = new();
+    public GatewaySection Gateway { get; set; } = new();
 }
 
 public class LineSection

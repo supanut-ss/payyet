@@ -119,7 +119,12 @@ function Get-ConfigValue([string]$Path) {
     }
     return [string]$node
 }
-$required = @("ConnectionStrings.Default", "Line.ChannelSecret", "Line.ChannelAccessToken", "Line.LoginChannelId", "Liff.Id", "Jobs.Key")
+$required = @("Line.LoginChannelId", "Liff.Id", "Jobs.Key")
+if ([string]::IsNullOrWhiteSpace((Get-ConfigValue "Gateway.ApiKey"))) {
+    $required += @("ConnectionStrings.Default", "Line.ChannelSecret", "Line.ChannelAccessToken")   # no gateway: the keys must be in this file
+} else {
+    $required += @("Gateway.BaseUrl", "Gateway.AppId")                                            # the DB string and LINE keys come from the gateway
+}
 $problems = @()
 foreach ($key in $required) {
     $value = Get-ConfigValue $key
