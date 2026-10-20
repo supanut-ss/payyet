@@ -1127,9 +1127,26 @@
     show([el('div', { class: 'card' }, nodes)]);
   }
 
+  // Startup diagnostics: name the step the page is on, show any script error, and never sit on "loading" without saying where.
+  var stepName = 'เริ่มต้น';
+  function step(n) {
+    stepName = n;
+    var f = app.firstElementChild;
+    if (f && f.classList.contains('muted') && /กำลังโหลด/.test(f.textContent)) f.textContent = 'กำลังโหลด… (' + n + ')';
+  }
+  window.addEventListener('error', function (e) { fail('เกิดข้อผิดพลาดในหน้า: ' + (e.message || '') + ' [ขั้น: ' + stepName + ']'); });
+  window.addEventListener('unhandledrejection', function (e) { fail('เกิดข้อผิดพลาด: ' + ((e.reason && e.reason.message) || e.reason || '') + ' [ขั้น: ' + stepName + ']'); });
+  setTimeout(function () {
+    var f = app.firstElementChild;
+    if (f && f.classList.contains('muted') && /กำลังโหลด/.test(f.textContent)) fail('โหลดไม่สำเร็จ ค้างที่ขั้น: ' + stepName + ' ลองปิดแล้วเปิดใหม่จากเมนู');
+  }, 15000);
+
+  step('ดึงค่าตั้งค่า');
   fetch(API + 'api/pay/config').then(function (r) { return r.json(); }).then(function (cfg) {
+    step('เชื่อมต่อ LINE');
     return liff.init({ liffId: cfg.liffId });
   }).then(function () {
+    step('ตรวจการล็อกอิน');
     if (!liff.isLoggedIn()) { liff.login(); return; }
     var q = new URLSearchParams(location.search);
     var st = q.get('liff.state') ? new URLSearchParams(q.get('liff.state').replace(/^\?/, '')) : null;
@@ -1138,6 +1155,7 @@
     billId = q.get('id') || (st && st.get('id'));
     if (!billToken && ['pick', 'manage', 'new', 'owe', 'home', 'promptpay', 'help', 'history', 'recurring', 'bill'].indexOf(mode) < 0) mode = 'home';
     idToken = liff.getIDToken();
+    step('โหลดข้อมูล (' + (mode || 'บิล') + ')');
     if (!idToken) { fail('ไม่พบข้อมูลผู้ใช้ ลองเปิดจากแอป LINE อีกครั้ง'); return; }
     if (mode === 'pick') return loadPick();
     if (mode === 'manage') return openManage();
