@@ -74,3 +74,17 @@ validate config → run tests → `dotnet publish` (win-x86 self-contained) → 
 | LIFF page says the link is invalid | opened without `?b=` — open it from the bill card button |
 | `เก็บ` replies "ยังไม่รู้จักกลุ่ม" | the collector has not posted in the group since the bot joined |
 | Reminders never arrive | scheduled task URL/key wrong (expect 401), or the bill was created today (first reminder is next day at 10:00 Bangkok) |
+
+## Moving the API to gateway.drivetodev.online/payyet (prepared, not live yet)
+
+`.\deploy-gateway.ps1` publishes the same build to the `payyet` folder of `gateway.drivetodev.online` using `deploy\appsettings.Gateway.json`
+(a git-ignored copy of the production config with `App:PublicBaseUrl = https://gateway.drivetodev.online/payyet` and `App:PathBase = /payyet`).
+The current API at `api.drivetodev.online` keeps running meanwhile (same database, so run only one reminder cron).
+Dry run first: `$env:PAYYET_DEPLOY_DRY_RUN = "1"; .\deploy-gateway.ps1`.
+
+Cut-over checklist (after `/health` answers at `https://gateway.drivetodev.online/payyet/health`):
+1. LINE Developers → Messaging API → Webhook URL `https://gateway.drivetodev.online/payyet/api/line/webhook` → Verify.
+2. `web/liff/pay.html`: change `var API` to `https://gateway.drivetodev.online/payyet/` and redeploy the web (`.\deploy-web.ps1`).
+3. External cron: `https://gateway.drivetodev.online/payyet/jobs/reminders` (header `X-Job-Key`); stop the old one.
+4. Slip images in cards use `App:PublicBaseUrl`; check one card after cut-over.
+5. Old cards keep working only while `api.drivetodev.online` stays up (their buttons point at LIFF/web URLs, not the API, so this mostly affects slip image links).

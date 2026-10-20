@@ -9,6 +9,7 @@ TestResults/
 
 # Secrets and machine-local config (never commit)
 appsettings.Production.json
+deploy/appsettings.Gateway.json
 appsettings.*.local.json
 .env
 .env.*

@@ -771,7 +771,7 @@ if (-not $files) {
 }
 
 $excluded = New-Object System.Collections.Generic.HashSet[string] ([System.StringComparer]::OrdinalIgnoreCase)
-foreach ($entry in $ExcludePaths) {
+foreach ($entry in ($ExcludePaths | ForEach-Object { $_ -split ',' })) {   # an entry may hold several comma-separated paths (-File passes arrays as one string)
     if (-not [string]::IsNullOrWhiteSpace($entry)) {
         $normalized = $entry.Trim().TrimStart('.') -replace '^[\\/]+', ''
         [void]$excluded.Add($normalized.Replace('\', '/'))

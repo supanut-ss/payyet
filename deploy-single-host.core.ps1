@@ -19,9 +19,11 @@ param(
     [Parameter(Mandatory = $true)] [ValidateNotNullOrEmpty()] [string]$Username,
     [Parameter(Mandatory = $true)] [ValidateNotNullOrEmpty()] [string]$Password,
 
-    # FTP path relative to the FTP login root (the subscription root). Pinned below on purpose.
-    [string]$RemotePath = "api.drivetodev.online",
-    [string]$PublicBaseUrl = "https://api.drivetodev.online",
+    # Where the API runs: "api" = its own subdomain site (current), "gateway" = the /payyet folder of gateway.drivetodev.online.
+    # The paths below are pinned on purpose (the FTP login root is the whole subscription).
+    [ValidateSet("api", "gateway")] [string]$ApiTarget = "api",
+    [string]$RemotePath = "",
+    [string]$PublicBaseUrl = "",
 
     # Static web app (landing page + LIFF pay page) lives in the /payyet folder of the drivetodev.online site.
     [string]$WebRemotePath = "drivetodev.online/payyet",
@@ -41,15 +43,27 @@ param(
 
 $ErrorActionPreference = "Stop"
 $repoRoot = $PSScriptRoot
-if (-not $ConfigPath) { $ConfigPath = Join-Path $repoRoot "deploy\appsettings.Production.json" }
+if ($ApiTarget -eq "gateway") {
+    if (-not $RemotePath) { $RemotePath = "gateway.drivetodev.online/payyet" }
+    if (-not $PublicBaseUrl) { $PublicBaseUrl = "https://gateway.drivetodev.online/payyet" }
+    if (-not $ConfigPath) { $ConfigPath = Join-Path $repoRoot "deploy\appsettings.Gateway.json" }   # same secrets, App:PublicBaseUrl / App:PathBase for the gateway
+    $targetKey = "gateway"
+    if ($Component -eq "all") { $Component = "api" }     # the static web app stays at drivetodev.online/payyet
+} else {
+    if (-not $RemotePath) { $RemotePath = "api.drivetodev.online" }
+    if (-not $PublicBaseUrl) { $PublicBaseUrl = "https://api.drivetodev.online" }
+    if (-not $ConfigPath) { $ConfigPath = Join-Path $repoRoot "deploy\appsettings.Production.json" }
+    $targetKey = "api"
+}
 $dryRun = $env:PAYYET_DEPLOY_DRY_RUN -eq "1"
 
 # ---- 0. Guard rails -------------------------------------------------------------------------------------
 # The FTP login root is the whole subscription (thaipesleague.com, other domains and subdomains). Refuse anything but our folder,
 # because -PruneRemoteRootFiles below deletes files in the target folder that are not part of this deployment.
 $target = $RemotePath.Trim('/').ToLowerInvariant()
-if ($target -ne "api.drivetodev.online") {
-    throw "Refusing to deploy: RemotePath must be 'api.drivetodev.online' (got '$RemotePath')."
+$allowedTarget = if ($ApiTarget -eq "gateway") { "gateway.drivetodev.online/payyet" } else { "api.drivetodev.online" }
+if ($target -ne $allowedTarget) {
+    throw "Refusing to deploy: RemotePath must be '$allowedTarget' for -ApiTarget $ApiTarget (got '$RemotePath')."
 }
 if ($WebRemotePath.Trim('/').ToLowerInvariant() -ne "drivetodev.online/payyet") {
     throw "Refusing to deploy: WebRemotePath must be 'drivetodev.online/payyet' (got '$WebRemotePath')."
@@ -180,7 +194,7 @@ if ($check.Contains([string][char]0xFFFD) -or $check -notmatch '\p{IsThai}') {
     throw "Maintenance page was not written as valid UTF-8 Thai text."
 }
 
-$manifestPath = Join-Path $repoRoot ".deploy-cache\payyet-manifest.json"
+$manifestPath = Join-Path $repoRoot $(if ($targetKey -eq "gateway") { ".deploy-cache\payyet-gateway-manifest.json" } else { ".deploy-cache\payyet-manifest.json" })
 $dryArgs = @(); if ($dryRun) { $dryArgs = @("-DryRun") }
 
 function Assert-UploadSucceeded([string]$Stage, [int]$ExitCode) {
@@ -190,7 +204,7 @@ function Assert-UploadSucceeded([string]$Stage, [int]$ExitCode) {
 }
 function Send-Offline {
     & $pwsh -NoProfile -ExecutionPolicy Bypass -File $uploader -Server $Server -Username $Username -Password $Password `
-        -LocalPath $stage -RemotePath $target -ExcludePaths @("app") @dryArgs
+        -LocalPath $stage -RemotePath $target -ExcludePaths "app,appsettings.Production.json,appsettings.Gateway.json" @dryArgs   # config files are sent once, inside the app upload
 }
 
 $deployed = $false
