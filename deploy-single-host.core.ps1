@@ -23,9 +23,9 @@ param(
     [string]$RemotePath = "api.drivetodev.online",
     [string]$PublicBaseUrl = "https://api.drivetodev.online",
 
-    # Static web app (landing page + LIFF pay page) lives in its own Plesk subdomain site.
-    [string]$WebRemotePath = "payyet.drivetodev.online",
-    [string]$WebPublicUrl = "https://payyet.drivetodev.online",
+    # Static web app (landing page + LIFF pay page) lives in the /payyet folder of the drivetodev.online site.
+    [string]$WebRemotePath = "drivetodev.online/payyet",
+    [string]$WebPublicUrl = "https://drivetodev.online/payyet",
     [ValidateSet("all", "api", "web")] [string]$Component = "all",   # api = backend only, web = static web app only
     [string]$ConfigPath = "",
 
@@ -51,8 +51,8 @@ $target = $RemotePath.Trim('/').ToLowerInvariant()
 if ($target -ne "api.drivetodev.online") {
     throw "Refusing to deploy: RemotePath must be 'api.drivetodev.online' (got '$RemotePath')."
 }
-if ($WebRemotePath.Trim('/').ToLowerInvariant() -ne "payyet.drivetodev.online") {
-    throw "Refusing to deploy: WebRemotePath must be 'payyet.drivetodev.online' (got '$WebRemotePath')."
+if ($WebRemotePath.Trim('/').ToLowerInvariant() -ne "drivetodev.online/payyet") {
+    throw "Refusing to deploy: WebRemotePath must be 'drivetodev.online/payyet' (got '$WebRemotePath')."
 }
 $PublicBaseUrl = $PublicBaseUrl.TrimEnd('/')
 $WebPublicUrl = $WebPublicUrl.TrimEnd('/')
@@ -64,7 +64,7 @@ $uploader = Join-Path $repoRoot "upload-ftp.ps1"
 function Deploy-Web {
     Write-Host "Uploading web app to ftp://$Server/$($WebRemotePath.Trim('/')) ..." -ForegroundColor Yellow
     $webDir = Join-Path $repoRoot "web"
-    $webManifest = Join-Path $repoRoot ".deploy-cache\payyet-web-manifest.json"
+    $webManifest = Join-Path $repoRoot ".deploy-cache\payyet-web-apex-manifest.json"
     $dryArgs = @(); if ($dryRun) { $dryArgs = @("-DryRun") }
     & $pwsh -NoProfile -ExecutionPolicy Bypass -File $uploader -Server $Server -Username $Username -Password $Password `
         -LocalPath $webDir -RemotePath $WebRemotePath.Trim('/').ToLowerInvariant() -ManifestPath $webManifest -PruneRemoteRootFiles @dryArgs
@@ -77,12 +77,13 @@ function Deploy-Web {
         catch { $webProblems += "$WebPublicUrl$path -> $($_.Exception.Message)" }
     }
     try {   # browser calls from the web app need CORS on the API
-        $pre = Invoke-WebRequest -Uri "$PublicBaseUrl/api/pay/config" -UseBasicParsing -TimeoutSec 30 -Headers @{ Origin = $WebPublicUrl }
-        if ($pre.Headers["Access-Control-Allow-Origin"] -ne $WebPublicUrl) { $webProblems += "API does not allow origin $WebPublicUrl (check App:WebBaseUrl)" }
+        $webOrigin = ([uri]$WebPublicUrl).GetLeftPart([System.UriPartial]::Authority)   # a CORS origin has no path
+        $pre = Invoke-WebRequest -Uri "$PublicBaseUrl/api/pay/config" -UseBasicParsing -TimeoutSec 30 -Headers @{ Origin = $webOrigin }
+        if ($pre.Headers["Access-Control-Allow-Origin"] -ne $webOrigin) { $webProblems += "API does not allow origin $webOrigin (check App:WebBaseUrl)" }
     } catch { $webProblems += "CORS check: $($_.Exception.Message)" }
     if ($webProblems.Count -gt 0) {
         Write-Warning ("Web checks reported problems:`n - " + ($webProblems -join "`n - "))
-        throw "Web app uploaded but not healthy. Is the Plesk subdomain site created with a valid certificate?"
+        throw "Web app uploaded but not healthy. Is the drivetodev.online/payyet folder served with a valid certificate?"
     }
     Write-Host "Web app verified: $WebPublicUrl" -ForegroundColor Green
 }

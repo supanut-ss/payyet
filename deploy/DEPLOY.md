@@ -16,7 +16,7 @@ FTP credentials live only in `deploy.credentials.ps1` (git-ignored).
 
 ## Web app subdomain
 
-`web/` (landing page + LIFF pay page, static) is deployed to its own Plesk site `payyet.drivetodev.online` (FTP folder of the same name); `api.drivetodev.online` serves the API and a status page at `/` (online; during a deploy IIS shows `app_offline.htm` = "updating"). The web pages call the API cross-origin; the API allows `App:WebBaseUrl` (default `https://payyet.drivetodev.online`). Create the subdomain in Plesk with Let's Encrypt before the first deploy, then change the LIFF Endpoint URL. The old `/liff/pay` on the API redirects to the new page.
+`web/` (landing page + LIFF pay page, static) is deployed to the `/payyet` folder of the `drivetodev.online` site (FTP folder `drivetodev.online/payyet`); `api.drivetodev.online` serves the API and a status page at `/` (online; during a deploy IIS shows `app_offline.htm` = "updating"). The web pages call the API cross-origin; the API allows `App:WebBaseUrl` (default `https://drivetodev.online/payyet`). Create the subdomain in Plesk with Let's Encrypt before the first deploy, then change the LIFF Endpoint URL. The old `/liff/pay` on the API redirects to the new page.
 
 ## One-time setup on the server
 
@@ -30,7 +30,7 @@ FTP credentials live only in `deploy.credentials.ps1` (git-ignored).
 |---|---|
 | Messaging API channel | Webhook URL `https://api.drivetodev.online/api/line/webhook`, Use webhook ON, press Verify |
 | LINE Official Account Manager | Auto-reply OFF, Greeting OFF, Allow bot to join group chats ON |
-| LIFF app (Login channel) | Endpoint URL `https://payyet.drivetodev.online/liff/pay.html` (size Full, scope `openid profile`, bot link to this bot) |
+| LIFF app (Login channel) | Endpoint URL `https://drivetodev.online/payyet/liff/pay.html` (size Full, scope `openid profile`, bot link to this bot) |
 
 Config values go into `deploy/appsettings.Production.json`: `Line:ChannelSecret`, `Line:ChannelAccessToken`, `Line:LoginChannelId`, `Liff:Id`; `Jobs:Key` and the DB connection are already set; `App:PublicBaseUrl = https://api.drivetodev.online`, `App:PathBase = ""`.
 
@@ -38,7 +38,7 @@ Config values go into `deploy/appsettings.Production.json`: `Line:ChannelSecret`
 
 ```powershell
 .\deploy-api.ps1    # API only (tests, publish, offline → upload → online, health checks)
-.\deploy-web.ps1    # static web app only (web/ → payyet.drivetodev.online, no downtime for the API)
+.\deploy-web.ps1    # static web app only (web/ → drivetodev.online/payyet, no downtime for the API)
 .\deploy-all.ps1    # API first, then the web app
 ```
 

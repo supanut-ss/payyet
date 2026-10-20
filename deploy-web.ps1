@@ -1,4 +1,4 @@
-# Deploy the static web app only (payyet.drivetodev.online).
+# Deploy the static web app only (drivetodev.online/payyet).
 # FTP credentials come from deploy.credentials.ps1 (git-ignored).
 $ErrorActionPreference = "Stop"
 . "$PSScriptRoot\deploy.credentials.ps1"

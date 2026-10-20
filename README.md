@@ -28,7 +28,7 @@ Not in the MVP (see roadmap in the design doc): rich menu, "ทวงตอน�
 1. **Database** — ✅ done for this host: MariaDB 11.8.8, database `thaipes_payyet`, schema imported (10 tables) and the app's queries verified against it. For another host: create a DB + user, import [db/schema.sql](db/schema.sql), and set `Db:ServerVersion` (e.g. `8.0.36-mysql` or `10.6.0-mariadb`).
 2. **LINE Developers**
    - Messaging API channel: copy *Channel secret* and *Channel access token (long-lived)*. Turn **off** auto-reply and greeting messages; turn **on** "Allow bot to join group chats". Webhook URL: `https://api.drivetodev.online/api/line/webhook`, enable "Use webhook", press Verify.
-   - LINE Login channel (same provider): add a LIFF app — size *Full*, scope `openid profile`, endpoint URL `https://payyet.drivetodev.online/liff/pay.html`. Note the *LIFF ID* and the Login *Channel ID*. Link the Login channel to the bot.
+   - LINE Login channel (same provider): add a LIFF app — size *Full*, scope `openid profile`, endpoint URL `https://drivetodev.online/payyet/liff/pay.html`. Note the *LIFF ID* and the Login *Channel ID*. Link the Login channel to the bot.
 3. **Secrets** — fill in `deploy/appsettings.Production.json` (DB and `Jobs:Key` are already set; paste the four LINE values) and upload it next to the app. It is git-ignored; delete your local copy afterwards. Shape:
    ```json
    {
@@ -43,7 +43,7 @@ Not in the MVP (see roadmap in the design doc): rich menu, "ทวงตอน�
    ```powershell
    .\deploy-all.ps1     # or .\deploy-api.ps1 / .\deploy-web.ps1 separately
    ```
-   The API deploy runs the tests, publishes `win-x86` self-contained (the shared app pool is 32-bit), uploads to the `api.drivetodev.online` folder via FTP and checks `/health`, the status page, the config and the webhook guard. The web deploy uploads `web/` to `payyet.drivetodev.online` and checks the pages and CORS. FTP credentials go in `deploy.credentials.ps1` (git-ignored). Set `$env:PAYYET_DEPLOY_DRY_RUN = "1"` for a dry run.
+   The API deploy runs the tests, publishes `win-x86` self-contained (the shared app pool is 32-bit), uploads to the `api.drivetodev.online` folder via FTP and checks `/health`, the status page, the config and the webhook guard. The web deploy uploads `web/` to `drivetodev.online/payyet` and checks the pages and CORS. FTP credentials go in `deploy.credentials.ps1` (git-ignored). Set `$env:PAYYET_DEPLOY_DRY_RUN = "1"` for a dry run.
 6. **Scheduled task** — Plesk → Scheduled Tasks → *Fetch a URL*, hourly: `https://api.drivetodev.online/jobs/reminders?key=<Jobs:Key>` (Plesk cannot send headers, so the key goes in the query; the `X-Job-Key` header also works).
 7. **Try it** — add the bot, send `พร้อมเพย์ <your phone>`, invite the bot to a test group, have two people type a message there, then send `เก็บ 20 ทดสอบ` to the bot in private.
 

@@ -16,11 +16,8 @@ builder.Services.AddControllers();
 // The web app (App:WebBaseUrl, may include a path such as https://drivetodev.online/payyet) calls this API from the browser.
 var webBase = (builder.Configuration["App:WebBaseUrl"] ?? "https://drivetodev.online/payyet").TrimEnd('/');
 var webOrigin = new Uri(webBase).GetLeftPart(UriPartial.Authority);   // CORS origins carry no path
-// The LIFF endpoint may still point at the old subdomain while the web app also lives at drivetodev.online/payyet:
-// allow both so the page never fails with "Failed to fetch" (CORS) whichever URL LINE opens.
-var corsOrigins = new[] { webOrigin, "https://drivetodev.online", "https://payyet.drivetodev.online" }.Distinct().ToArray();
 builder.Services.AddCors(o => o.AddDefaultPolicy(p => p
-    .WithOrigins(corsOrigins)
+    .WithOrigins(webOrigin)
     .WithHeaders("Authorization", "Content-Type")
     .WithMethods("GET", "POST")));
 
