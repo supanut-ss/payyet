@@ -49,7 +49,6 @@ if ($ApiTarget -eq "gateway") {
     if (-not $PublicBaseUrl) { $PublicBaseUrl = "https://gateway.drivetodev.online/payyet" }
     if (-not $ConfigPath) { $ConfigPath = Join-Path $repoRoot "deploy\appsettings.Gateway.json" }   # same secrets, App:PublicBaseUrl / App:PathBase for the gateway
     $targetKey = "gateway"
-    if ($Component -eq "all") { $Component = "api" }     # the static web app stays at drivetodev.online/payyet
 } else {
     if (-not $RemotePath) { $RemotePath = "api.drivetodev.online" }
     if (-not $PublicBaseUrl) { $PublicBaseUrl = "https://api.drivetodev.online" }
