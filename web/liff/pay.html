@@ -1141,6 +1141,21 @@
     if (f && f.classList.contains('muted') && /กำลังโหลด/.test(f.textContent)) fail('โหลดไม่สำเร็จ ค้างที่ขั้น: ' + stepName + ' ลองปิดแล้วเปิดใหม่จากเมนู');
   }, 15000);
 
+  // This app is for phones inside LINE: a desktop browser (or the LINE desktop app) only gets an explanation.
+  function isDesktop() {
+    var ua = navigator.userAgent || '';
+    if (/Android|iPhone|iPod|iPad|Mobile/i.test(ua)) return false;
+    if (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1) return false;   // iPad in desktop mode
+    return true;
+  }
+  if (isDesktop()) {
+    document.title = 'PayYet · เปิดบนมือถือ';
+    show([el('div', { class: 'card' }, [
+      el('div', { class: 'li', style: 'padding-top:0' }, [icon('users'), el('strong', { text: 'เปิดบนมือถือเท่านั้น' })]),
+      el('div', { class: 'muted pad', text: 'หน้านี้ใช้ได้เฉพาะในแอป LINE บนมือถือ ไม่รองรับคอมพิวเตอร์' }),
+      el('div', { class: 'muted small', text: 'เปิดแชทกับบอท PayYet บนมือถือ แล้วกดเมนูด้านล่าง (เก็บเงิน / ยอดค้าง / พร้อมเพย์) หรือกดปุ่มบนการ์ดบิล' })
+    ])]);
+  } else {
   step('ดึงค่าตั้งค่า');
   fetch(API + 'api/pay/config').then(function (r) { return r.json(); }).then(function (cfg) {
     step('เชื่อมต่อ LINE');
@@ -1169,6 +1184,7 @@
     if (mode === 'help') return renderHelp();
     return load();
   }).catch(function (e) { fail(e.message || 'โหลดไม่สำเร็จ'); });
+  }
 })();
 </script>
 </body>
