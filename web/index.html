@@ -409,7 +409,7 @@
     var how = document.querySelector('[data-howlink]'); if (how) how.classList.add('hidden');
   }
   showAdd(oaUrl);
-  fetch('https://api.drivetodev.online/api/pay/config').then(function (r) { return r.json(); }).then(function (c) {
+  fetch('https://gateway.drivetodev.online/payyet/api/pay/config').then(function (r) { return r.json(); }).then(function (c) {
     if (c && /^https:\/\/(line\.me|lin\.ee)\//.test(c.oaUrl || '')) showAdd(c.oaUrl);
   }).catch(function () {});
 

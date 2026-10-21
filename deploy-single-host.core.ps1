@@ -1,5 +1,6 @@
 <#
-    Single-host deployment for Pay_Yet (ASP.NET Core app served at https://api.drivetodev.online, its own subdomain site).
+    Single-host deployment for Pay_Yet: the API runs at https://gateway.drivetodev.online/payyet, the static web app at
+    https://drivetodev.online/payyet (the old api.drivetodev.online target is still available with -ApiTarget api).
 
     Flow (adapted from the proven P2S / EA single-host workflow on the same Plesk host):
       0. validate target + production config   1. unit tests   2. dotnet publish (win-x86 self-contained)
@@ -19,9 +20,9 @@ param(
     [Parameter(Mandatory = $true)] [ValidateNotNullOrEmpty()] [string]$Username,
     [Parameter(Mandatory = $true)] [ValidateNotNullOrEmpty()] [string]$Password,
 
-    # Where the API runs: "api" = its own subdomain site (current), "gateway" = the /payyet folder of gateway.drivetodev.online.
+    # Where the API runs: "gateway" (default) = the /payyet folder of gateway.drivetodev.online, "api" = the old api.drivetodev.online site.
     # The paths below are pinned on purpose (the FTP login root is the whole subscription).
-    [ValidateSet("api", "gateway")] [string]$ApiTarget = "api",
+    [ValidateSet("api", "gateway")] [string]$ApiTarget = "gateway",
     [string]$RemotePath = "",
     [string]$PublicBaseUrl = "",
 
@@ -76,6 +77,11 @@ $uploader = Join-Path $repoRoot "upload-ftp.ps1"
 
 # ---- Static web app (separate Plesk site; independent of the API deploy) ---------------------------------
 function Deploy-Web {
+    # The web pages call the API at $PublicBaseUrl (see `var API` in web/liff/pay.html): never publish them while it is down.
+    if (-not $dryRun) {
+        try { Invoke-WebRequest -Uri "$PublicBaseUrl/health" -UseBasicParsing -TimeoutSec 30 | Out-Null }
+        catch { throw "Refusing to deploy the web app: the API does not answer at $PublicBaseUrl/health yet. Deploy the API first (.\deploy-api.ps1)." }
+    }
     Write-Host "Uploading web app to ftp://$Server/$($WebRemotePath.Trim('/')) ..." -ForegroundColor Yellow
     $webDir = Join-Path $repoRoot "web"
     $webManifest = Join-Path $repoRoot ".deploy-cache\payyet-web-apex-manifest.json"

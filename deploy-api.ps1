@@ -1,4 +1,4 @@
-# Deploy the API only (api.drivetodev.online).
+# Deploy the API only (gateway.drivetodev.online/payyet; use -ApiTarget api for the old api.drivetodev.online site).
 # FTP credentials come from deploy.credentials.ps1 (git-ignored).
 $ErrorActionPreference = "Stop"
 . "$PSScriptRoot\deploy.credentials.ps1"

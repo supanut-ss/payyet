@@ -1,4 +1,4 @@
-# Deploy the API to gateway.drivetodev.online/payyet (the API only; the web app stays at drivetodev.online/payyet).
+# Same as deploy-api.ps1 (kept for clarity): the API goes to gateway.drivetodev.online/payyet; the web app stays at drivetodev.online/payyet.
 # FTP credentials come from deploy.credentials.ps1 (git-ignored); secrets from deploy\appsettings.Gateway.json (git-ignored).
 # Set $env:PAYYET_DEPLOY_DRY_RUN = "1" to see what would be uploaded without changing anything.
 $ErrorActionPreference = "Stop"

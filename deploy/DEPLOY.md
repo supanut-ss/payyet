@@ -7,7 +7,7 @@ FTP credentials live only in `deploy.credentials.ps1` (git-ignored).
 
 | Item | Value |
 |---|---|
-| Public URL | `https://api.drivetodev.online` (own subdomain site; FTP folder `api.drivetodev.online`) |
+| Public URL | `https://gateway.drivetodev.online/payyet` (FTP folder `gateway.drivetodev.online/payyet`; the old `api.drivetodev.online` site is the `-ApiTarget api` fallback) |
 | Host | Plesk on Windows, IIS 10, ASP.NET Core Module v2 installed |
 | Why a subdomain | `drivetodev.online/lineapi` failed: IIS locks `system.webServer/handlers` for the apex site (500.19, lock violation) |
 | Build | `win-x86` **self-contained**, out-of-process (the shared app pool is 32-bit and has no x86 runtime) |
@@ -46,7 +46,7 @@ FTP credentials live in `deploy.credentials.ps1` (git-ignored; define `$D2D_DEPL
 validate config → run tests → `dotnet publish` (win-x86 self-contained) → patch `web.config` → upload `app_offline.htm` → upload files (prunes stale root files) → remove `app_offline.htm` → health checks (`/health`, LIFF page, config, unsigned webhook = 401, JSON error body). If a check fails the site is put back into maintenance mode.
 
 - Dry run (no remote changes): `$env:PAYYET_DEPLOY_DRY_RUN = "1"` before running.
-- The script refuses any `RemotePath` other than `api.drivetodev.online`.
+- The script refuses any `RemotePath` other than the pinned one of the chosen `-ApiTarget` (`gateway.drivetodev.online/payyet` or `api.drivetodev.online`).
 - `StdoutLog = $true` in `deploy-api.ps1` / `deploy-all.ps1` keeps ANCM logs in `logs/` on the server; remove it once stable.
 
 ## After the app is up
@@ -75,16 +75,17 @@ validate config → run tests → `dotnet publish` (win-x86 self-contained) → 
 | `เก็บ` replies "ยังไม่รู้จักกลุ่ม" | the collector has not posted in the group since the bot joined |
 | Reminders never arrive | scheduled task URL/key wrong (expect 401), or the bill was created today (first reminder is next day at 10:00 Bangkok) |
 
-## Moving the API to gateway.drivetodev.online/payyet (prepared, not live yet)
+## API at gateway.drivetodev.online/payyet (the default target now)
 
-`.\deploy-gateway.ps1` publishes the same build to the `payyet` folder of `gateway.drivetodev.online` using `deploy\appsettings.Gateway.json`
-(a git-ignored copy of the production config with `App:PublicBaseUrl = https://gateway.drivetodev.online/payyet` and `App:PathBase = /payyet`).
-The current API at `api.drivetodev.online` keeps running meanwhile (same database, so run only one reminder cron).
-Dry run first: `$env:PAYYET_DEPLOY_DRY_RUN = "1"; .\deploy-gateway.ps1`.
+`.\deploy-api.ps1` (or `.\deploy-all.ps1`) publishes the API to the `payyet` folder of `gateway.drivetodev.online` using `deploy\appsettings.Gateway.json`
+(a git-ignored copy of the production config with `App:PublicBaseUrl = https://gateway.drivetodev.online/payyet` and `App:PathBase = /payyet`;
+it may also carry the `Gateway` section so the DB string and LINE keys are read from the gateway). The static web app goes to `drivetodev.online/payyet`.
+`deploy-all.ps1` deploys the API first and the web only after `/health` answers; `.\deploy-web.ps1` alone refuses to run while the API is down.
+The old `api.drivetodev.online` site stays available with `-ApiTarget api` (it uses `deploy\appsettings.Production.json`). Dry run: `$env:PAYYET_DEPLOY_DRY_RUN = "1"`.
 
-Cut-over checklist (after `/health` answers at `https://gateway.drivetodev.online/payyet/health`):
+One-time switch-over (after the first successful gateway deploy, `/health` answers at `https://gateway.drivetodev.online/payyet/health`):
 1. LINE Developers → Messaging API → Webhook URL `https://gateway.drivetodev.online/payyet/api/line/webhook` → Verify.
-2. `web/liff/pay.html`: change `var API` to `https://gateway.drivetodev.online/payyet/` and redeploy the web (`.\deploy-web.ps1`).
-3. External cron: `https://gateway.drivetodev.online/payyet/jobs/reminders` (header `X-Job-Key`); stop the old one.
-4. Slip images in cards use `App:PublicBaseUrl`; check one card after cut-over.
-5. Old cards keep working only while `api.drivetodev.online` stays up (their buttons point at LIFF/web URLs, not the API, so this mostly affects slip image links).
+2. External cron: `https://gateway.drivetodev.online/payyet/jobs/reminders` (header `X-Job-Key`); stop the old one (both hit the same database).
+3. Run `.\deploy-web.ps1` so the pages call the gateway API (`var API` in `web/liff/pay.html`, config fetch in `web/index.html`).
+4. Check one slip card: slip images use `App:PublicBaseUrl`.
+5. If IIS answers 500.19 for the `/payyet` folder (locked `handlers`), make it an application in Plesk (Virtual Directories) and redeploy.
